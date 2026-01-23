@@ -15,6 +15,7 @@ interface CalendarGridProps {
     onShiftCreate: (start: Date, end?: Date, employeeId?: string) => void;
     onAssignEmployee: (shiftId: string, employeeId: string) => void;
     onAddEmployeeToSlot: (start: Date, employeeId: string) => void;
+    readOnly?: boolean;
 }
 
 const START_HOUR = 0;
@@ -31,7 +32,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     onShiftMove,
     onShiftCreate,
     onAssignEmployee,
-    onAddEmployeeToSlot
+    onAddEmployeeToSlot,
+    readOnly = false
 }) => {
     const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
     const gridRef = useRef<HTMLDivElement>(null);
@@ -188,12 +190,15 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                                 {HOURS.map(hour => (
                                     <div
                                         key={hour}
-                                        className="border-b border-slate-50 hover:bg-blue-50/30 transition-colors cursor-crosshair"
+                                        className={cn(
+                                            "border-b border-slate-50 transition-colors",
+                                            !readOnly && "hover:bg-blue-50/30 cursor-crosshair"
+                                        )}
                                         style={{ height: `${ROW_HEIGHT}px` }}
-                                        onDragOver={handleDragOver}
-                                        onDrop={(e) => handleDrop(e, dayOffset, hour)}
-                                        onMouseDown={(e) => handleMouseDown(dayOffset, hour, e)}
-                                        onMouseEnter={() => handleMouseEnter(dayOffset, hour)}
+                                        onDragOver={(e) => { if (!readOnly) handleDragOver(e); }}
+                                        onDrop={(e) => { if (!readOnly) handleDrop(e, dayOffset, hour); }}
+                                        onMouseDown={(e) => { if (!readOnly) handleMouseDown(dayOffset, hour, e); }}
+                                        onMouseEnter={() => { if (!readOnly) handleMouseEnter(dayOffset, hour); }}
                                     ></div>
                                 ))}
 
@@ -225,6 +230,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                                                 employee={employee}
                                                 onClick={() => onShiftClick(shift)}
                                                 onDragStart={(e) => handleDragStartShift(e, shift.id)}
+                                                readOnly={readOnly}
                                             />
                                         </div>
                                     );

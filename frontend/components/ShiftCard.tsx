@@ -11,9 +11,10 @@ interface ShiftCardProps {
     employee?: Employee;
     onClick: () => void;
     onDragStart: (e: React.DragEvent) => void;
+    readOnly?: boolean;
 }
 
-const ShiftCard: React.FC<ShiftCardProps> = ({ shift, employee, onClick, onDragStart }) => {
+const ShiftCard: React.FC<ShiftCardProps> = ({ shift, employee, onClick, onDragStart, readOnly }) => {
     const isUnassigned = !shift.employeeId;
 
     let colorClasses = "bg-white border-slate-200 text-slate-700";
@@ -43,11 +44,13 @@ const ShiftCard: React.FC<ShiftCardProps> = ({ shift, employee, onClick, onDragS
 
     return (
         <div
-            draggable
-            onDragStart={onDragStart}
+            draggable={!readOnly}
+            onDragStart={(e) => { if (!readOnly) onDragStart(e); }}
             onClick={(e) => { e.stopPropagation(); onClick(); }}
             className={cn(
-                "relative rounded-md p-2 text-xs font-medium border shadow-sm cursor-pointer hover:ring-2 hover:ring-offset-1 transition-all group overflow-hidden h-full flex flex-col justify-between select-none active:cursor-grabbing",
+                "relative rounded-md p-2 text-xs font-medium border shadow-sm transition-all group overflow-hidden h-full flex flex-col justify-between select-none",
+                !readOnly && "cursor-pointer hover:ring-2 hover:ring-offset-1 active:cursor-grabbing",
+                readOnly && "cursor-default",
                 colorClasses
             )}
         >

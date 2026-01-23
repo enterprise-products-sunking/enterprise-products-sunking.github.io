@@ -8,7 +8,6 @@ import {
     Bell,
     Share2,
     Plus,
-    Sparkles,
     UserCircle,
     Users
 } from 'lucide-react';
@@ -23,7 +22,6 @@ import MemberModal from './MemberModal';
 
 import { getInitialShifts, EMPLOYEES } from '../constants';
 import { Shift, Employee, ViewMode, UserRole, ShiftStatus } from '../types';
-import { generateSchedule } from '../services/geminiService';
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,8 +50,6 @@ const ShiftSyncShell: React.FC = () => {
 
     const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
     const [selectedMember, setSelectedMember] = useState<Partial<Employee> | null>(null);
-
-    const [isGenerating, setIsGenerating] = useState(false);
 
     // Effect for hydration
     useEffect(() => {
@@ -193,20 +189,7 @@ const ShiftSyncShell: React.FC = () => {
         toast.success('Member removed');
     };
 
-    // --- AI Schedule ---
-    const handleAutoSchedule = async () => {
-        setIsGenerating(true);
-        const toastId = toast.loading('AI is generating the schedule...');
 
-        const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
-        const newShifts = await generateSchedule(employees, weekStart, shifts);
-
-        setShifts(prev => [...prev, ...newShifts]);
-
-        toast.dismiss(toastId);
-        toast.success(`Generated ${newShifts.length} new shifts!`);
-        setIsGenerating(false);
-    };
 
     const renderView = () => {
         switch (viewMode) {
@@ -245,6 +228,7 @@ const ShiftSyncShell: React.FC = () => {
                         onShiftCreate={handleShiftCreate}
                         onAssignEmployee={handleAssignEmployee}
                         onAddEmployeeToSlot={handleAddEmployeeToSlot}
+                        readOnly={false}
                     />
                 );
         }
@@ -302,17 +286,6 @@ const ShiftSyncShell: React.FC = () => {
                 )}
 
                 <div className="flex items-center gap-3">
-                    {activeTab === 'calendar' && userRole === UserRole.Admin && (
-                        <Button
-                            onClick={handleAutoSchedule}
-                            disabled={isGenerating}
-                            className="bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white shadow-md border-0"
-                        >
-                            <Sparkles className={`w-4 h-4 mr-2 ${isGenerating ? 'animate-spin' : ''}`} />
-                            {isGenerating ? 'Thinking...' : 'Auto-Schedule'}
-                        </Button>
-                    )}
-
                     <Button variant="ghost" size="icon" className="relative text-slate-400 hover:text-slate-600">
                         <Bell className="w-5 h-5" />
                         <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
@@ -356,17 +329,16 @@ const ShiftSyncShell: React.FC = () => {
                             <div className="flex gap-2">
                                 {userRole === UserRole.Admin && (
                                     <Button
-                                        variant="ghost"
                                         size="sm"
                                         onClick={() => handleShiftCreate(new Date())}
-                                        className="text-blue-600 hover:bg-blue-50 text-xs gap-1"
+                                        className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm text-xs gap-1.5 font-medium px-4"
                                     >
-                                        <Plus className="w-3 h-3" /> New Shift
+                                        <Plus className="w-4 h-4" /> New Shift
                                     </Button>
                                 )}
-                                <Button variant="ghost" size="sm" className="text-slate-500 hover:bg-slate-50 text-xs gap-1">
+                                {/* <Button variant="ghost" size="sm" className="text-slate-500 hover:bg-slate-50 text-xs gap-1">
                                     <Share2 className="w-3 h-3" /> Share
-                                </Button>
+                                </Button> */}
                             </div>
                         </div>
 
