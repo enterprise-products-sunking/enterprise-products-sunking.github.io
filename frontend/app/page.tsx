@@ -1,5 +1,7 @@
-import { ComponentExample } from "@/components/component-example";
+import ShiftSyncShell from "@/components/ShiftSyncShell";
 
-export default function Page() {
-return <ComponentExample />;
+export default function Home() {
+    return (
+        <ShiftSyncShell />
+    );
 }
