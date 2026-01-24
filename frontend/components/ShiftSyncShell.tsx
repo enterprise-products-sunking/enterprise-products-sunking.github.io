@@ -19,12 +19,14 @@ import ListView from './ListView';
 import ShiftModal from './ShiftModal';
 import MembersView from './MembersView';
 import MemberModal from './MemberModal';
+import MyShiftView from './MyShiftView';
 
 import { getInitialShifts, EMPLOYEES } from '../constants';
 import { Shift, Employee, ViewMode, UserRole, ShiftStatus } from '../types';
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Briefcase } from 'lucide-react';
 // import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Removed to fix hydration mismatch
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
@@ -42,7 +44,7 @@ const ShiftSyncShell: React.FC = () => {
     const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.Week);
 
     // Navigation State
-    const [activeTab, setActiveTab] = useState<'calendar' | 'members'>('calendar');
+    const [activeTab, setActiveTab] = useState<'calendar' | 'members' | 'my_shift'>('calendar');
 
     // Modal States
     const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
@@ -250,12 +252,18 @@ const ShiftSyncShell: React.FC = () => {
             {/* Top Navigation */}
             <header className="h-16 border-b border-slate-200 bg-white flex items-center justify-between px-6 z-20 shadow-sm relative">
                 <div className="flex items-center gap-4">
-                    <div className="flex items-center bg-slate-100 p-1 rounded-lg w-[400px] h-10">
+                    <div className="flex items-center bg-slate-100 p-1 rounded-lg w-[500px] h-10">
                         <button
                             onClick={() => { setActiveTab('calendar'); setUserRole(UserRole.Admin); }}
                             className={`flex-1 text-sm font-medium py-1.5 rounded-md transition-all ${activeTab === 'calendar' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
                         >
                             Calendar
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('my_shift')}
+                            className={`flex-1 text-sm font-medium py-1.5 rounded-md transition-all flex items-center justify-center gap-2 ${activeTab === 'my_shift' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
+                        >
+                            <Briefcase className="w-4 h-4" /> My Shift
                         </button>
                         <button
                             onClick={() => setActiveTab('members')}
@@ -307,6 +315,11 @@ const ShiftSyncShell: React.FC = () => {
                         employees={employees}
                         onAddMember={handleAddMember}
                         onEditMember={handleEditMember}
+                    />
+                ) : activeTab === 'my_shift' ? (
+                    <MyShiftView
+                        employees={employees}
+                        shifts={shifts}
                     />
                 ) : (
                     /* Calendar Container */
