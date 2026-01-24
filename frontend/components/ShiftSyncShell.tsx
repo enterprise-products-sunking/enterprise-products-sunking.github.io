@@ -349,7 +349,7 @@ const ShiftSyncShell: React.FC = () => {
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
                         transition={{ duration: 0.2 }}
-                        className="w-full h-full flex flex-col"
+                        className="w-full h-full flex flex-col min-h-0"
                     >
                         {activeTab === 'members' ? (
                             <MembersView
@@ -364,9 +364,9 @@ const ShiftSyncShell: React.FC = () => {
                             />
                         ) : (
                             /* Calendar Container */
-                            <main className="flex-1 flex flex-col relative">
+                            <main className="flex-1 flex flex-col relative min-h-0">
                                 {/* Toolbar */}
-                                <div className="h-14 border-b border-slate-100 bg-white/50 backdrop-blur-sm flex items-center justify-between px-6 z-10">
+                                <div className="h-14 border-b border-slate-100 bg-white/50 backdrop-blur-sm flex items-center justify-between px-6 z-10 flex-shrink-0">
                                     <div className="flex bg-slate-100 rounded-lg p-1 gap-1">
                                         {(['week', 'month', 'list'] as const).map((mode) => (
                                             <button
