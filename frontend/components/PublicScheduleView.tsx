@@ -151,11 +151,11 @@ const PublicScheduleView: React.FC = () => {
                 <div className="flex items-center gap-3">
                     <Button
                         size="sm"
-                        className="bg-slate-900 hover:bg-slate-800 text-white shadow-md rounded-lg"
+                        className="bg-blue-600 hover:bg-blue-700 text-white shadow-md rounded-lg"
                         onClick={() => window.location.href = '/login'}
                     >
                         <LogIn className="w-4 h-4 mr-2" />
-                        Staff Login
+                        Login
                     </Button>
                 </div>
             </header>

@@ -16,8 +16,10 @@ import {
     X,
     Repeat
 } from 'lucide-react';
-import { format, isSameDay, isToday, isPast, startOfDay } from 'date-fns';
+import { format, isSameDay, isToday, isPast, startOfDay, addDays, isWithinInterval, differenceInHours, parseISO, startOfWeek } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
+import { DateRange } from "react-day-picker";
+import { cn } from "@/lib/utils";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -36,6 +38,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Shift, Employee } from '../types';
 import { toast } from 'sonner';
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover";
 
 // Extended shift type for my shifts view
 interface MyShift {
@@ -45,7 +52,7 @@ interface MyShift {
     startTime: string;
     endTime: string;
     location: string;
-    status: 'scheduled' | 'pending_switch' | 'swapped';
+    status: 'scheduled' | 'pending_switch' | 'swapped' | 'pending_confirmation';
     pendingExchangeWith?: string; // ID of shift being exchanged
 }
 
@@ -103,8 +110,12 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts }) => {
     const [shiftToOffer, setShiftToOffer] = useState<MyShift | null>(null);
     const [exchangeNote, setExchangeNote] = useState('');
 
-    // Calendar state
+    // Calendar and Range state
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+    const [dateRange, setDateRange] = useState<DateRange | undefined>({
+        from: startOfWeek(new Date(), { weekStartsOn: 1 }),
+        to: addDays(startOfWeek(new Date(), { weekStartsOn: 1 }), 6),
+    });
 
     // Mock data for my shifts
     const [myShifts, setMyShifts] = useState<MyShift[]>([
@@ -113,6 +124,9 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts }) => {
         { id: '3', title: 'Night Shift - Security', date: new Date(2026, 0, 22), startTime: '22:00', endTime: '06:00', location: 'Building B', status: 'scheduled' },
         { id: '4', title: 'Day Shift - Reception', date: new Date(), startTime: '08:00', endTime: '16:00', location: 'Main Lobby', status: 'scheduled' },
         { id: '5', title: 'Afternoon Shift - Support', date: new Date(2026, 0, 30), startTime: '12:00', endTime: '20:00', location: 'Support Center', status: 'scheduled' },
+        // Shifts pending confirmation (approval)
+        { id: '6', title: 'Special Event Coverage', date: new Date(2026, 1, 5), startTime: '18:00', endTime: '23:00', location: 'Event Hall', status: 'pending_confirmation' },
+        { id: '7', title: 'Weekend Rotating Shift', date: new Date(2026, 1, 6), startTime: '09:00', endTime: '14:00', location: 'Front Desk', status: 'pending_confirmation' },
     ]);
 
     // Mock marketplace shifts (these are shifts other users want to exchange)
@@ -137,23 +151,98 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts }) => {
 
     const shiftDates = useMemo(() => myShifts.map(s => s.date), [myShifts]);
 
-    // Stats
-    const upcomingCount = myShifts.filter(s => getShiftTimeStatus(s.date) === 'upcoming').length;
+    // Stats logic
+    const filteredShiftsInRange = useMemo(() => {
+        if (!dateRange?.from || !dateRange?.to) return myShifts;
+        return myShifts.filter(s =>
+            isWithinInterval(s.date, { start: dateRange.from!, end: dateRange.to! })
+        );
+    }, [myShifts, dateRange]);
+
+    const statsInRange = useMemo(() => {
+        const completed = filteredShiftsInRange.filter(s => getShiftTimeStatus(s.date) === 'past');
+        const totalShifts = completed.length;
+        const totalHours = completed.reduce((acc, s) => {
+            // Mock duration calculation: parse startTime '09:00' and endTime '17:00'
+            const [sH, sM] = s.startTime.split(':').map(Number);
+            const [eH, eM] = s.endTime.split(':').map(Number);
+            let hours = eH - sH + (eM - sM) / 60;
+            if (hours < 0) hours += 24; // Over-night shifts
+            return acc + hours;
+        }, 0);
+
+        return { totalShifts, totalHours };
+    }, [filteredShiftsInRange]);
+
+    const upcomingCount = myShifts.filter(s => getShiftTimeStatus(s.date) === 'upcoming' && s.status !== 'pending_confirmation').length;
     const currentCount = myShifts.filter(s => getShiftTimeStatus(s.date) === 'current').length;
     const pendingCount = myShifts.filter(s => s.status === 'pending_switch').length;
+    const confirmationCount = myShifts.filter(s => s.status === 'pending_confirmation').length;
 
-    // Sorted shifts
+    // Sorted shifts (exclude pending_confirmation for normal view)
     const sortedShifts = useMemo(() => {
-        return [...myShifts].sort((a, b) => {
-            const statusOrder = { current: 0, upcoming: 1, past: 2 };
-            const aStatus = getShiftTimeStatus(a.date);
-            const bStatus = getShiftTimeStatus(b.date);
-            if (aStatus !== bStatus) return statusOrder[aStatus] - statusOrder[bStatus];
-            return a.date.getTime() - b.date.getTime();
-        });
+        return [...myShifts]
+            .filter(s => s.status !== 'pending_confirmation')
+            .sort((a, b) => {
+                const statusOrder = { current: 0, upcoming: 1, past: 2 };
+                const aStatus = getShiftTimeStatus(a.date);
+                const bStatus = getShiftTimeStatus(b.date);
+                if (aStatus !== bStatus) return statusOrder[aStatus] - statusOrder[bStatus];
+                return a.date.getTime() - b.date.getTime();
+            });
     }, [myShifts]);
 
-    // === Exchange Flow Handlers ===
+    // Shifts valid for approval
+    const shiftsToApprove = useMemo(() => {
+        return myShifts.filter(s => s.status === 'pending_confirmation')
+            .sort((a, b) => a.date.getTime() - b.date.getTime());
+    }, [myShifts]);
+
+    // === Handlers ===
+
+    // Approval state
+    const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
+    const [shiftToApprove, setShiftToApprove] = useState<MyShift | null>(null);
+
+    const initiateApproveShift = (shift: MyShift) => {
+        setShiftToApprove(shift);
+        setIsApprovalModalOpen(true);
+    };
+
+    const confirmApproveShift = () => {
+        if (!shiftToApprove) return;
+
+        setMyShifts(prev => prev.map(s =>
+            s.id === shiftToApprove.id
+                ? { ...s, status: 'scheduled' as const }
+                : s
+        ));
+
+        toast.success("Shift Confirmed", {
+            description: "Added to your schedule and synced to Google Calendar."
+        });
+
+        setIsApprovalModalOpen(false);
+        setShiftToApprove(null);
+    };
+
+    // Filter shifts for selected date (Approval)
+    const approvalShiftsForSelectedDate = useMemo(() => {
+        if (!selectedDate) return [];
+        return shiftsToApprove.filter(shift => isSameDay(shift.date, selectedDate));
+    }, [shiftsToApprove, selectedDate]);
+
+    // Dates that have pending approvals
+    const approvalDates = useMemo(() => shiftsToApprove.map(s => s.date), [shiftsToApprove]);
+
+    // === Restored Exchange & Reject Handlers ===
+
+    const handleRejectShift = (shiftId: string) => {
+        setMyShifts(prev => prev.filter(s => s.id !== shiftId));
+        toast.info("Shift Rejected", {
+            description: "The shift has been removed from your list."
+        });
+    };
 
     // Start exchange from My Schedule (user wants to swap their shift)
     const handleRequestSwitch = (shift: MyShift) => {
@@ -232,20 +321,63 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts }) => {
 
     return (
         <div className="flex-1 overflow-auto p-6 bg-gradient-to-br from-slate-50 to-slate-100/50">
-            {/* Header */}
-            <div className="mb-6">
+            {/* ... (Header and Stats Section remain unchanged) ... */}
+
+            {/* Header with Date Range Picker */}
+            <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }}>
                     <h1 className="text-2xl font-bold text-slate-900">My Shifts</h1>
                     <p className="text-sm text-slate-500 mt-1">Manage your schedule and exchange shifts with colleagues</p>
                 </motion.div>
+
+                <div className="flex items-center gap-2">
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button
+                                id="date"
+                                variant={"outline"}
+                                className={cn(
+                                    "w-[260px] justify-start text-left font-normal bg-white border-slate-200",
+                                    !dateRange && "text-muted-foreground"
+                                )}
+                            >
+                                <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
+                                {dateRange?.from ? (
+                                    dateRange.to ? (
+                                        <>
+                                            {format(dateRange.from, "LLL dd, y")} -{" "}
+                                            {format(dateRange.to, "LLL dd, y")}
+                                        </>
+                                    ) : (
+                                        format(dateRange.from, "LLL dd, y")
+                                    )
+                                ) : (
+                                    <span>Pick a date range</span>
+                                )}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="end">
+                            <Calendar
+                                initialFocus
+                                mode="range"
+                                defaultMonth={dateRange?.from}
+                                selected={dateRange}
+                                onSelect={setDateRange}
+                                numberOfMonths={2}
+                            />
+                        </PopoverContent>
+                    </Popover>
+                </div>
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
                 {[
                     { label: "Today", count: currentCount, sub: "active shifts", icon: CheckCircle2, color: "emerald" },
                     { label: "Upcoming", count: upcomingCount, sub: "scheduled shifts", icon: CalendarIcon, color: "amber" },
-                    { label: "Pending", count: pendingCount, sub: "exchange requests", icon: Repeat, color: "blue" },
+                    { label: "Approvals", count: confirmationCount, sub: "shifts to confirm", icon: ClipboardCheck, color: "red" },
+                    { label: "Hours Worked", count: statsInRange.totalHours.toFixed(1), sub: "in selected period", icon: Clock, color: "purple" },
+                    { label: "Completed", count: statsInRange.totalShifts, sub: "shifts completed", icon: TrendingUp, color: "indigo" },
                 ].map((stat, i) => (
                     <motion.div
                         key={i}
@@ -253,7 +385,7 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts }) => {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: i * 0.1 }}
                     >
-                        <Card className="bg-white/80 backdrop-blur border-slate-200/60 shadow-sm hover:shadow-md transition-all">
+                        <Card className="bg-white/80 backdrop-blur border-slate-200/60 shadow-sm hover:shadow-md transition-all h-full">
                             <CardContent className="p-5">
                                 <div className="flex items-center justify-between">
                                     <div>
@@ -261,7 +393,15 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts }) => {
                                         <p className="text-3xl font-bold text-slate-900 mt-1">{stat.count}</p>
                                         <p className="text-xs text-slate-400 mt-1">{stat.sub}</p>
                                     </div>
-                                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg bg-gradient-to-br from-${stat.color}-500 to-${stat.color}-600 shadow-${stat.color}-500/20`}>
+                                    <div className={cn(
+                                        "w-12 h-12 rounded-xl flex items-center justify-center shadow-lg bg-gradient-to-br",
+                                        stat.color === "emerald" && "from-emerald-500 to-emerald-600 shadow-emerald-500/20",
+                                        stat.color === "amber" && "from-amber-500 to-amber-600 shadow-amber-500/20",
+                                        stat.color === "blue" && "from-blue-500 to-blue-600 shadow-blue-500/20",
+                                        stat.color === "purple" && "from-purple-500 to-purple-600 shadow-purple-500/20",
+                                        stat.color === "indigo" && "from-indigo-500 to-indigo-600 shadow-indigo-500/20",
+                                        stat.color === "red" && "from-red-500 to-red-600 shadow-red-500/20"
+                                    )}>
                                         <stat.icon className="w-6 h-6 text-white" />
                                     </div>
                                 </div>
@@ -272,12 +412,19 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts }) => {
             </div>
 
             {/* Main Content */}
-            <Card className="bg-white/90 backdrop-blur border-slate-200/60 shadow-sm overflow-hidden">
-                <Tabs defaultValue="my_shifts" className="w-full">
-                    <CardHeader className="pb-0 border-b border-slate-100">
+            <Card className="bg-white/90 backdrop-blur border-slate-200/60 shadow-sm overflow-hidden min-h-[600px] flex flex-col">
+                <Tabs defaultValue="my_shifts" className="w-full flex-1 flex flex-col">
+                    <CardHeader className="pb-0 border-b border-slate-100 flex-shrink-0">
                         <TabsList variant="line" className="gap-0 bg-transparent p-0">
                             <TabsTrigger value="my_shifts" className="relative px-6 py-3 text-sm font-medium data-[state=active]:text-blue-600 data-[state=inactive]:text-slate-500 hover:text-slate-700 rounded-none bg-transparent">
                                 My Schedule
+                                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 opacity-0 transition-opacity data-[state=active]:opacity-100" />
+                            </TabsTrigger>
+                            <TabsTrigger value="approval" className="relative px-6 py-3 text-sm font-medium data-[state=active]:text-blue-600 data-[state=inactive]:text-slate-500 hover:text-slate-700 rounded-none bg-transparent flex items-center gap-2">
+                                Shift Approval
+                                {confirmationCount > 0 && (
+                                    <span className="bg-red-100 text-red-700 text-xs font-semibold px-2 py-0.5 rounded-full">{confirmationCount}</span>
+                                )}
                                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 opacity-0 transition-opacity data-[state=active]:opacity-100" />
                             </TabsTrigger>
                             <TabsTrigger value="marketplace" className="relative px-6 py-3 text-sm font-medium data-[state=active]:text-blue-600 data-[state=inactive]:text-slate-500 hover:text-slate-700 rounded-none bg-transparent flex items-center gap-2">
@@ -291,8 +438,8 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts }) => {
                     </CardHeader>
 
                     {/* My Schedule Content */}
-                    <TabsContent value="my_shifts" className="p-0">
-                        <div className="flex flex-col lg:flex-row">
+                    <TabsContent value="my_shifts" className="p-0 flex-1">
+                        <div className="flex flex-col lg:flex-row h-full">
                             {/* Calendar Section */}
                             <div className="lg:w-80 border-b lg:border-b-0 lg:border-r border-slate-100 p-4">
                                 <Calendar
@@ -366,6 +513,11 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts }) => {
                                                                                 <Repeat className="w-3 h-3 mr-1" /> Pending Exchange
                                                                             </Badge>
                                                                         )}
+                                                                        {shift.status === 'pending_confirmation' && (
+                                                                            <Badge variant="outline" className="text-xs font-medium bg-red-100 text-red-700 border-red-200">
+                                                                                Action Required
+                                                                            </Badge>
+                                                                        )}
                                                                     </div>
                                                                     <div className="flex flex-wrap gap-4 text-sm text-slate-500">
                                                                         <div className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-slate-400" /><span>{shift.startTime} - {shift.endTime}</span></div>
@@ -399,8 +551,111 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts }) => {
                         </div>
                     </TabsContent>
 
+                    {/* Shift Approval Content (Split Layout) */}
+                    <TabsContent value="approval" className="p-0 flex-1">
+                        <div className="flex flex-col lg:flex-row h-full">
+                            {/* Calendar Section (Approval) */}
+                            <div className="lg:w-80 border-b lg:border-b-0 lg:border-r border-slate-100 p-4">
+                                <Calendar
+                                    mode="single"
+                                    selected={selectedDate}
+                                    onSelect={setSelectedDate}
+                                    className="rounded-lg"
+                                    modifiers={{ needsApproval: approvalDates }}
+                                    modifiersStyles={{ needsApproval: { fontWeight: 'bold', color: '#dc2626', textDecoration: 'underline', textDecorationColor: '#dc2626' } }}
+                                />
+                                <div className="mt-4 px-2">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <div className="w-3 h-3 rounded-full bg-red-600"></div>
+                                        <span className="text-xs text-slate-600 font-medium">Pending Approval</span>
+                                    </div>
+                                    <p className="text-xs text-slate-400">
+                                        Select a date to view shift details and confirm your assignment.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Approval List */}
+                            <div className="flex-1 p-6">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h2 className="text-sm font-semibold text-slate-700">
+                                        {selectedDate ? format(selectedDate, 'EEEE, MMMM d, yyyy') : 'All Pending Approvals'}
+                                    </h2>
+                                    <Button variant="ghost" size="sm" onClick={() => setSelectedDate(undefined)} className="text-xs text-blue-600 hover:text-blue-700">
+                                        Show All
+                                    </Button>
+                                </div>
+
+                                <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                                    <AnimatePresence mode='popLayout'>
+                                        {(selectedDate ? approvalShiftsForSelectedDate : shiftsToApprove).length === 0 ? (
+                                            <motion.div
+                                                initial={{ opacity: 0, scale: 0.95 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                className="text-center py-12 bg-slate-50/50 rounded-xl border border-dashed border-slate-200"
+                                            >
+                                                <CheckCircle2 className="w-10 h-10 text-emerald-300 mx-auto mb-2" />
+                                                <p className="text-slate-500 font-medium">No pending approvals {selectedDate && 'on this day'}</p>
+                                            </motion.div>
+                                        ) : (
+                                            (selectedDate ? approvalShiftsForSelectedDate : shiftsToApprove).map((shift, idx) => (
+                                                <motion.div
+                                                    key={shift.id}
+                                                    initial={{ opacity: 0, y: 10 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    exit={{ opacity: 0, scale: 0.95 }}
+                                                    transition={{ delay: idx * 0.05 }}
+                                                    className="bg-white border border-red-100 rounded-xl p-4 hover:shadow-md transition-all relative overflow-hidden group"
+                                                >
+                                                    <div className="absolute top-0 left-0 w-1.5 h-full bg-red-500"></div>
+                                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pl-3">
+                                                        <div className="flex items-start gap-4">
+                                                            <div className="w-14 h-14 rounded-xl flex flex-col items-center justify-center font-bold shadow-sm flex-shrink-0 bg-red-50 text-red-600">
+                                                                <span className="text-[10px] uppercase tracking-wide opacity-80">{format(shift.date, 'EEE')}</span>
+                                                                <span className="text-xl leading-none">{format(shift.date, 'd')}</span>
+                                                            </div>
+                                                            <div>
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    <h3 className="font-semibold text-slate-900">{shift.title}</h3>
+                                                                    <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-red-200 text-[10px]">Action Required</Badge>
+                                                                </div>
+                                                                <div className="flex flex-wrap gap-4 text-sm text-slate-500">
+                                                                    <div className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-slate-400" /><span>{shift.startTime} - {shift.endTime}</span></div>
+                                                                    <div className="flex items-center gap-1.5"><MapPin className="w-4 h-4 text-slate-400" /><span>{shift.location}</span></div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="flex items-center gap-2 pl-3 md:pl-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
+                                                            <Button
+                                                                onClick={() => handleRejectShift(shift.id)}
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                                                            >
+                                                                Reject
+                                                            </Button>
+                                                            <Button
+                                                                onClick={() => initiateApproveShift(shift)}
+                                                                size="sm"
+                                                                className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-500/20"
+                                                            >
+                                                                Approve
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                </motion.div>
+                                            ))
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+                            </div>
+                        </div>
+                    </TabsContent>
+
                     {/* Marketplace Content */}
                     <TabsContent value="marketplace" className="p-6">
+                        {/* ... (Marketplace content remains the same) ... */}
                         <div className="space-y-4">
                             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-xl p-4 flex items-start gap-3">
                                 <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -484,6 +739,45 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts }) => {
                 </Tabs>
             </Card>
 
+            {/* Approval Confirmation Modal */}
+            <Dialog open={isApprovalModalOpen} onOpenChange={setIsApprovalModalOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-emerald-700">
+                            <CheckCircle2 className="w-5 h-5" />
+                            Confirm Shift Approval
+                        </DialogTitle>
+                        <DialogDescription className="pt-2">
+                            Are you sure you want to approve this shift?
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {shiftToApprove && (
+                        <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 my-2">
+                            <h4 className="font-semibold text-slate-900 text-sm mb-1">{shiftToApprove.title}</h4>
+                            <p className="text-xs text-slate-500">
+                                {format(shiftToApprove.date, 'EEEE, MMMM d, yyyy')} • {shiftToApprove.startTime} - {shiftToApprove.endTime}
+                            </p>
+                        </div>
+                    )}
+
+                    <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 flex gap-3 items-start">
+                        <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <div className="text-sm text-blue-800">
+                            <p className="font-medium mb-0.5">Google Calendar Sync</p>
+                            <p className="text-xs opacity-90">Approving this shift will automatically add it to your connected Google Calendar.</p>
+                        </div>
+                    </div>
+
+                    <DialogFooter className="gap-2 sm:gap-0 mt-2">
+                        <Button variant="outline" onClick={() => setIsApprovalModalOpen(false)}>Cancel</Button>
+                        <Button onClick={confirmApproveShift} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                            Confirm & Sync
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             {/* Exchange Request Modal (from My Schedule) */}
             <Dialog open={isExchangeModalOpen} onOpenChange={(open) => { setIsExchangeModalOpen(open); if (!open) resetExchangeModal(); }}>
                 <DialogContent className="sm:max-w-lg">
@@ -496,6 +790,7 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts }) => {
                             Post your shift to the marketplace. Other staff can propose an exchange with their shift.
                         </DialogDescription>
                     </DialogHeader>
+
 
                     {selectedShift && (
                         <div className="space-y-4 py-4">

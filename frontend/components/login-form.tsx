@@ -35,7 +35,7 @@ export function LoginForm({
     }
 
     return (
-        <div className="w-full h-screen grid lg:grid-cols-2 overflow-hidden">
+        <div className={cn("w-full h-screen grid lg:grid-cols-2 overflow-hidden", className)} {...props}>
             {/* Left Side - Form */}
             <div className="flex flex-col justify-center items-center p-6 bg-white relative z-10">
                 <motion.div
@@ -121,7 +121,7 @@ export function LoginForm({
                         </h2>
                         <div className="space-y-4">
                             {[
-                                "Smart scheduling algorithms",
+                                "Smart scheduling",
                                 "Instant shift swapping",
                                 "Real-time team notifications"
                             ].map((item, i) => (
