@@ -20,7 +20,6 @@ const ShiftCard: React.FC<ShiftCardProps> = ({ shift, employee, onClick, onDragS
     let colorClasses = "bg-white border-slate-200 text-slate-700";
 
     if (isUnassigned) {
-        // bg-stripes-gray is custom, we'll simulate or just use a pattern if available, or just keeping it simple
         colorClasses = "bg-slate-50 border-dashed border-slate-300 text-slate-500";
     } else if (shift.status === ShiftStatus.Pending) {
         colorClasses = "bg-amber-50 border-amber-200 text-amber-800";
@@ -48,37 +47,37 @@ const ShiftCard: React.FC<ShiftCardProps> = ({ shift, employee, onClick, onDragS
             onDragStart={(e) => { if (!readOnly) onDragStart(e); }}
             onClick={(e) => { e.stopPropagation(); onClick(); }}
             className={cn(
-                "relative rounded-md p-2 text-xs font-medium border shadow-sm transition-all group overflow-hidden h-full flex flex-col justify-between select-none",
+                "relative rounded-md p-1.5 text-xs font-medium border shadow-sm transition-all group overflow-hidden h-full flex flex-col select-none",
                 !readOnly && "cursor-pointer hover:ring-2 hover:ring-offset-1 active:cursor-grabbing",
                 readOnly && "cursor-default",
                 colorClasses
             )}
         >
-            <div className="flex justify-between items-start">
-                <span className="truncate font-bold">
+            <div className="flex justify-between items-start gap-1">
+                <span className="truncate font-bold text-[10px] leading-tight">
                     {format(shift.start, 'h:mm a')} - {format(shift.end, 'h:mm a')}
                 </span>
                 <StatusIcon />
             </div>
 
-            <div className="mt-1">
+            <div className="mt-0.5 flex-1 min-h-0 flex flex-col justify-center">
                 {isUnassigned ? (
-                    <span className="italic text-slate-500">Open Shift</span>
+                    <span className="italic text-slate-500 text-[10px] truncate">Open</span>
                 ) : (
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
                         {employee?.avatar && (
-                            <img src={employee.avatar} alt="" className="w-5 h-5 rounded-full" />
+                            <img src={employee.avatar} alt="" className="w-4 h-4 rounded-full flex-shrink-0" />
                         )}
-                        <span className="truncate text-[10px]">{employee?.name}</span>
+                        <span className="truncate text-[10px] font-semibold">{employee?.name}</span>
                     </div>
                 )}
+                {/* Role only visible if enough height, crudely handled by flex */}
+                <div className="text-[9px] opacity-75 truncate uppercase tracking-wide hidden sm:block mt-0.5">
+                    {shift.role}
+                </div>
             </div>
 
-            <div className="mt-1 text-[10px] opacity-75 truncate uppercase tracking-wide">
-                {shift.role}
-            </div>
-
-            <button className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-black/10 transition-all">
+            <button className="absolute bottom-0.5 right-0.5 opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-black/10 transition-all">
                 <MoreHorizontal className="w-3 h-3" />
             </button>
         </div>

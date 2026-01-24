@@ -12,6 +12,7 @@ import {
     Users
 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
+import { motion, AnimatePresence } from 'framer-motion';
 
 import CalendarGrid from './CalendarGrid';
 import MonthView from './MonthView';
@@ -19,13 +20,14 @@ import ListView from './ListView';
 import ShiftModal from './ShiftModal';
 import MembersView from './MembersView';
 import MemberModal from './MemberModal';
+import MyShiftView from './MyShiftView';
 
 import { getInitialShifts, EMPLOYEES } from '../constants';
 import { Shift, Employee, ViewMode, UserRole, ShiftStatus } from '../types';
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-// import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Removed to fix hydration mismatch
+import { Briefcase } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const ShiftSyncShell: React.FC = () => {
@@ -42,7 +44,7 @@ const ShiftSyncShell: React.FC = () => {
     const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.Week);
 
     // Navigation State
-    const [activeTab, setActiveTab] = useState<'calendar' | 'members'>('calendar');
+    const [activeTab, setActiveTab] = useState<'calendar' | 'members' | 'my_shift'>('calendar');
 
     // Modal States
     const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
@@ -243,108 +245,162 @@ const ShiftSyncShell: React.FC = () => {
         return `${format(start, 'MMM d')} - ${format(end, 'MMM d, yyyy')}`;
     };
 
+    const tabs = [
+        { id: 'calendar', label: 'Calendar', icon: null },
+        { id: 'my_shift', label: 'My Shift', icon: Briefcase },
+        { id: 'members', label: 'Members', icon: Users },
+    ] as const;
+
     return (
-        <div className="flex flex-col h-screen bg-white">
+        <div className="flex flex-col h-screen bg-slate-50/50">
             <Toaster position="bottom-center" />
 
             {/* Top Navigation */}
-            <header className="h-16 border-b border-slate-200 bg-white flex items-center justify-between px-6 z-20 shadow-sm relative">
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center bg-slate-100 p-1 rounded-lg w-[400px] h-10">
-                        <button
-                            onClick={() => { setActiveTab('calendar'); setUserRole(UserRole.Admin); }}
-                            className={`flex-1 text-sm font-medium py-1.5 rounded-md transition-all ${activeTab === 'calendar' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
-                        >
-                            Calendar
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('members')}
-                            className={`flex-1 text-sm font-medium py-1.5 rounded-md transition-all flex items-center justify-center gap-2 ${activeTab === 'members' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
-                        >
-                            <Users className="w-4 h-4" /> Members
-                        </button>
+            <header className="h-16 glass sticky top-0 z-50 px-6 flex items-center justify-between shadow-sm transition-all">
+                <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-2 font-bold text-xl text-slate-800">
+                        <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-blue-500/20 shadow-lg">
+                            S
+                        </div>
+                        ShiftSync
+                    </div>
+
+                    <div className="flex items-center bg-slate-100/50 p-1 rounded-xl">
+                        {tabs.map((tab) => (
+                            <button
+                                key={tab.id}
+                                onClick={() => {
+                                    setActiveTab(tab.id as any);
+                                    if (tab.id === 'calendar') setUserRole(UserRole.Admin);
+                                }}
+                                className={`
+                                    relative px-4 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 z-10 flex items-center gap-2
+                                    ${activeTab === tab.id ? 'text-blue-700' : 'text-slate-500 hover:text-slate-700'}
+                                `}
+                            >
+                                {activeTab === tab.id && (
+                                    <motion.div
+                                        layoutId="activeTab"
+                                        className="absolute inset-0 bg-white rounded-lg shadow-sm border border-slate-200/50"
+                                        initial={false}
+                                        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                                        style={{ zIndex: -1 }}
+                                    />
+                                )}
+                                {tab.icon && <tab.icon className="w-4 h-4" />}
+                                {tab.label}
+                            </button>
+                        ))}
                     </div>
                 </div>
 
                 {activeTab === 'calendar' && (
-                    <div className="flex items-center gap-4 animate-in fade-in duration-300">
-                        <div className="flex items-center bg-slate-50 rounded-lg border border-slate-200 p-0.5">
-                            <Button variant="ghost" size="icon" onClick={handlePrev} className="h-8 w-8 text-slate-600">
-                                <ChevronLeft className="w-4 h-4" />
-                            </Button>
-                            <Button variant="ghost" onClick={handleToday} className="px-3 text-sm font-semibold text-slate-700 h-8">
+                    <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="flex items-center gap-4 absolute left-1/2 transform -translate-x-1/2"
+                    >
+                        <div className="flex items-center bg-white rounded-full border border-slate-200 shadow-sm p-1 pr-4">
+                            <div className="flex items-center gap-1 mr-4">
+                                <Button variant="ghost" size="icon" onClick={handlePrev} className="h-7 w-7 rounded-full text-slate-600 hover:bg-slate-100">
+                                    <ChevronLeft className="w-4 h-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" onClick={handleNext} className="h-7 w-7 rounded-full text-slate-600 hover:bg-slate-100">
+                                    <ChevronRight className="w-4 h-4" />
+                                </Button>
+                            </div>
+                            <Button variant="ghost" onClick={handleToday} className="px-3 py-1 h-auto text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-full mr-3">
                                 Today
                             </Button>
-                            <Button variant="ghost" size="icon" onClick={handleNext} className="h-8 w-8 text-slate-600">
-                                <ChevronRight className="w-4 h-4" />
-                            </Button>
+                            <span className="text-sm font-semibold text-slate-700 min-w-[120px] text-center">
+                                {getDateRangeLabel()}
+                            </span>
                         </div>
-                        <span className="text-sm font-medium text-slate-600 min-w-[140px] text-center hidden md:block">
-                            {getDateRangeLabel()}
-                        </span>
-                    </div>
+                    </motion.div>
                 )}
 
                 <div className="flex items-center gap-3">
-                    <Button variant="ghost" size="icon" className="relative text-slate-400 hover:text-slate-600">
+                    <Button variant="ghost" size="icon" className="relative text-slate-400 hover:text-slate-600 hover:bg-white/50">
                         <Bell className="w-5 h-5" />
-                        <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+                        <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white/50"></span>
                     </Button>
 
-                    <Avatar className="h-8 w-8">
-                        <AvatarFallback className="bg-blue-100 text-blue-600 border border-blue-200">
-                            <UserCircle className="w-5 h-5" />
-                        </AvatarFallback>
-                    </Avatar>
+                    <div className="flex items-center gap-2 pl-4 border-l border-slate-200">
+                        <div className="text-right hidden md:block">
+                            <p className="text-sm font-semibold text-slate-700 leading-none">Admin User</p>
+                            <p className="text-xs text-slate-400 mt-1">Super Admin</p>
+                        </div>
+                        <Avatar className="h-9 w-9 border-2 border-white shadow-sm ring-1 ring-slate-100">
+                            <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
+                                AD
+                            </AvatarFallback>
+                        </Avatar>
+                    </div>
                 </div>
             </header>
 
             {/* Main Content Area */}
-            <div className="flex flex-1 overflow-hidden">
+            <div className="flex flex-1 overflow-hidden relative">
+                <AnimatePresence mode="wait">
+                    <motion.div
+                        key={activeTab}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.2 }}
+                        className="w-full h-full flex flex-col min-h-0"
+                    >
+                        {activeTab === 'members' ? (
+                            <MembersView
+                                employees={employees}
+                                onAddMember={handleAddMember}
+                                onEditMember={handleEditMember}
+                            />
+                        ) : activeTab === 'my_shift' ? (
+                            <MyShiftView
+                                employees={employees}
+                                shifts={shifts}
+                            />
+                        ) : (
+                            /* Calendar Container */
+                            <main className="flex-1 flex flex-col relative min-h-0">
+                                {/* Toolbar */}
+                                <div className="h-14 border-b border-slate-100 bg-white/50 backdrop-blur-sm flex items-center justify-between px-6 z-10 flex-shrink-0">
+                                    <div className="flex bg-slate-100 rounded-lg p-1 gap-1">
+                                        {(['week', 'month', 'list'] as const).map((mode) => (
+                                            <button
+                                                key={mode}
+                                                onClick={() => setViewMode(mode as ViewMode)}
+                                                className={`
+                                                    px-3 py-1 text-xs font-semibold rounded-md capitalize transition-all
+                                                    ${viewMode === mode ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}
+                                                `}
+                                            >
+                                                {mode}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="flex gap-3">
+                                        {userRole === UserRole.Admin && (
+                                            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => handleShiftCreate(new Date())}
+                                                    className="bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 text-xs gap-1.5 font-medium px-4 h-9 rounded-lg"
+                                                >
+                                                    <Plus className="w-4 h-4" /> New Shift
+                                                </Button>
+                                            </motion.div>
+                                        )}
+                                    </div>
+                                </div>
 
-                {activeTab === 'members' ? (
-                    <MembersView
-                        employees={employees}
-                        onAddMember={handleAddMember}
-                        onEditMember={handleEditMember}
-                    />
-                ) : (
-                    /* Calendar Container */
-                    <main className="flex-1 flex flex-col relative animate-in fade-in duration-300">
-                        {/* Toolbar */}
-                        <div className="h-12 border-b border-slate-100 bg-white flex items-center justify-between px-4">
-                            <div className="flex gap-2">
-                                {(['week', 'month', 'list'] as const).map((mode) => (
-                                    <Button
-                                        key={mode}
-                                        variant={viewMode === mode ? 'secondary' : 'ghost'}
-                                        size="sm"
-                                        onClick={() => setViewMode(mode as ViewMode)}
-                                        className={`text-xs font-semibold capitalize ${viewMode === mode ? 'bg-blue-50 text-blue-700 hover:bg-blue-100' : 'text-slate-500'}`}
-                                    >
-                                        {mode}
-                                    </Button>
-                                ))}
-                            </div>
-                            <div className="flex gap-2">
-                                {userRole === UserRole.Admin && (
-                                    <Button
-                                        size="sm"
-                                        onClick={() => handleShiftCreate(new Date())}
-                                        className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm text-xs gap-1.5 font-medium px-4"
-                                    >
-                                        <Plus className="w-4 h-4" /> New Shift
-                                    </Button>
-                                )}
-                                {/* <Button variant="ghost" size="sm" className="text-slate-500 hover:bg-slate-50 text-xs gap-1">
-                                    <Share2 className="w-3 h-3" /> Share
-                                </Button> */}
-                            </div>
-                        </div>
-
-                        {renderView()}
-                    </main>
-                )}
+                                {renderView()}
+                            </main>
+                        )}
+                    </motion.div>
+                </AnimatePresence>
             </div>
 
             {/* Modals */}
@@ -364,8 +420,6 @@ const ShiftSyncShell: React.FC = () => {
                 onSave={handleSaveMember}
                 onDelete={handleDeleteMember}
             />
-
-
         </div>
     );
 };

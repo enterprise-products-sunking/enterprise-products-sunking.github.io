@@ -141,22 +141,22 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
 
     return (
         <div
-            className="flex-1 flex flex-col h-full bg-white overflow-hidden relative"
+            className="flex-1 flex flex-col min-h-0 bg-white overflow-hidden relative"
             onMouseUp={handleMouseUp}
             onMouseLeave={() => { if (isSelecting) handleMouseUp(); }}
         >
             {/* Header Row (Days) */}
-            <div className="flex border-b border-slate-200 select-none pr-4">
-                <div className="w-16 flex-shrink-0 border-r border-slate-100 bg-slate-50"></div>
+            <div className="flex border-b border-slate-200 select-none pr-4 shadow-sm z-20">
+                <div className="w-16 flex-shrink-0 border-r border-slate-100 bg-slate-50/80 backdrop-blur-sm"></div>
                 {DAYS.map(dayOffset => {
                     const date = addDays(weekStart, dayOffset);
                     const isToday = isSameDay(date, new Date());
                     return (
                         <div key={dayOffset} className={cn("flex-1 text-center py-3 border-r border-slate-100", isToday && "bg-blue-50/50")}>
-                            <div className={cn("text-xs font-semibold uppercase", isToday ? "text-blue-600" : "text-slate-500")}>
+                            <div className={cn("text-xs font-semibold uppercase tracking-wider mb-0.5", isToday ? "text-blue-600" : "text-slate-400")}>
                                 {format(date, 'EEE')}
                             </div>
-                            <div className={cn("text-xl font-light", isToday ? "text-blue-700" : "text-slate-800")}>
+                            <div className={cn("text-xl font-light", isToday ? "text-blue-700 font-normal" : "text-slate-800")}>
                                 {format(date, 'd')}
                             </div>
                         </div>
@@ -165,13 +165,26 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
             </div>
 
             {/* Grid Content */}
-            <div className="flex-1 overflow-y-auto relative scroll-smooth" ref={gridRef}>
-                <div className="flex" style={{ height: `${HOURS.length * ROW_HEIGHT}px` }}>
-                    {/* Time Labels Column */}
-                    <div className="w-16 flex-shrink-0 border-r border-slate-100 bg-slate-50 select-none">
+            <div className="flex-1 overflow-y-auto relative scroll-smooth bg-slate-50/30" ref={gridRef}>
+                <div className="flex relative" style={{ height: `${HOURS.length * ROW_HEIGHT}px` }}>
+
+                    {/* Horizontal Grid Lines Background (Global) */}
+                    <div className="absolute inset-0 w-full pointer-events-none z-0">
                         {HOURS.map(hour => (
-                            <div key={hour} className="border-b border-slate-100 text-xs text-slate-400 relative" style={{ height: `${ROW_HEIGHT}px` }}>
-                                <span className="absolute -top-2 right-2">{format(setHours(new Date(), hour), 'h a')}</span>
+                            <div key={hour} className="border-b border-slate-100" style={{ height: `${ROW_HEIGHT}px` }}>
+                                {/* Half-hour dashed line */}
+                                <div className="border-b border-dashed border-slate-50/50 h-1/2 w-full"></div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Time Labels Column */}
+                    <div className="w-16 flex-shrink-0 border-r border-slate-100 bg-white/80 backdrop-blur-sm select-none sticky left-0 z-30">
+                        {HOURS.map(hour => (
+                            <div key={hour} className="text-xs font-medium text-slate-400 relative h-full group" style={{ height: `${ROW_HEIGHT}px` }}>
+                                <span className="absolute -top-2.5 right-3 bg-white px-1 group-hover:text-slate-600 transition-colors">
+                                    {format(setHours(new Date(), hour), 'h a')}
+                                </span>
                             </div>
                         ))}
                     </div>
@@ -185,13 +198,13 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                         );
 
                         return (
-                            <div key={dayOffset} className="flex-1 border-r border-slate-100 relative group select-none">
-                                {/* Background Grid Lines & Interaction Layer */}
+                            <div key={dayOffset} className="flex-1 border-r border-slate-100 relative group select-none z-10">
+                                {/* Interaction Layer */}
                                 {HOURS.map(hour => (
                                     <div
                                         key={hour}
                                         className={cn(
-                                            "border-b border-slate-50 transition-colors",
+                                            "transition-colors h-full",
                                             !readOnly && "hover:bg-blue-50/30 cursor-crosshair"
                                         )}
                                         style={{ height: `${ROW_HEIGHT}px` }}
@@ -219,7 +232,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                                             style={{
                                                 position: 'absolute',
                                                 top: `${Math.max(0, topOffset)}px`,
-                                                height: `${Math.max(30, height)}px`,
+                                                height: `${Math.max(34, height)}px`, // Ensure min height for readability
                                                 left: '4px',
                                                 right: '4px',
                                                 zIndex: 10
@@ -239,12 +252,15 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                                 {/* Current Time Indicator (if today) */}
                                 {isSameDay(currentDayDate, new Date()) && (
                                     <div
-                                        className="absolute left-0 right-0 border-t-2 border-red-400 z-20 pointer-events-none"
+                                        className="absolute left-0 right-0 border-t-2 border-red-500 z-20 pointer-events-none shadow-sm"
                                         style={{
                                             top: `${((new Date().getHours() + new Date().getMinutes() / 60) - START_HOUR) * ROW_HEIGHT}px`
                                         }}
                                     >
-                                        <div className="absolute -left-1.5 -top-1.5 w-3 h-3 bg-red-400 rounded-full"></div>
+                                        <div className="absolute -left-1.5 -top-1.5 w-3 h-3 bg-red-500 rounded-full shadow-sm"></div>
+                                        <div className="absolute left-0 -top-6 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                                            {format(new Date(), 'h:mm a')}
+                                        </div>
                                     </div>
                                 )}
                             </div>

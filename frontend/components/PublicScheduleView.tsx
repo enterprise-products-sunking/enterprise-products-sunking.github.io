@@ -5,9 +5,10 @@ import { addDays, startOfWeek, subWeeks, addWeeks, format, subMonths, addMonths 
 import {
     ChevronLeft,
     ChevronRight,
-    Users,
-    Calendar as CalendarIcon
+    Calendar as CalendarIcon,
+    LogIn
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 import CalendarGrid from './CalendarGrid';
 import MonthView from './MonthView';
@@ -63,7 +64,6 @@ const PublicScheduleView: React.FC = () => {
     const renderView = () => {
         switch (viewMode) {
             case ViewMode.Month:
-                // Note: MonthView might expect click handlers, we pass no-ops or appropriate read-only behavior
                 return (
                     <MonthView
                         currentDate={currentDate}
@@ -88,10 +88,6 @@ const PublicScheduleView: React.FC = () => {
                 );
             case ViewMode.Week:
             default:
-                // CalendarGrid expects interaction handlers. 
-                // Since it's reused, we pass no-ops. 
-                // ideally CalendarGrid should support a `readOnly` prop to disable drag/drop.
-                // For now, passing no-ops will prevent state updates, effectively making it read-only.
                 return (
                     <CalendarGrid
                         currentDate={currentDate}
@@ -118,59 +114,75 @@ const PublicScheduleView: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col h-screen bg-white">
-            {/* Top Navigation - Simplified for Public View */}
-            <header className="h-16 border-b border-slate-200 bg-white flex items-center justify-between px-6 z-20 shadow-sm relative">
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md">
-                        <CalendarIcon className="w-5 h-5" />
-                        <span className="font-semibold text-sm">Public Schedule</span>
+        <div className="flex flex-col h-screen bg-slate-50/50">
+            {/* Top Navigation - Public View */}
+            <header className="h-16 glass sticky top-0 z-50 px-6 flex items-center justify-between shadow-sm transition-all">
+                <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-2 font-bold text-xl text-slate-800">
+                        <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-blue-500/20 shadow-lg">
+                            S
+                        </div>
+                        ShiftSync
+                        <Badge variant="secondary" className="ml-2 font-normal bg-blue-50 text-blue-700 border-blue-100">
+                            Public View
+                        </Badge>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-4 animate-in fade-in duration-300">
-                    <div className="flex items-center bg-slate-50 rounded-lg border border-slate-200 p-0.5">
-                        <Button variant="ghost" size="icon" onClick={handlePrev} className="h-8 w-8 text-slate-600">
-                            <ChevronLeft className="w-4 h-4" />
-                        </Button>
-                        <Button variant="ghost" onClick={handleToday} className="px-3 text-sm font-semibold text-slate-700 h-8">
+                <div className="flex items-center gap-4 absolute left-1/2 transform -translate-x-1/2">
+                    <div className="flex items-center bg-white rounded-full border border-slate-200 shadow-sm p-1 pr-4">
+                        <div className="flex items-center gap-1 mr-4">
+                            <Button variant="ghost" size="icon" onClick={handlePrev} className="h-7 w-7 rounded-full text-slate-600 hover:bg-slate-100">
+                                <ChevronLeft className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={handleNext} className="h-7 w-7 rounded-full text-slate-600 hover:bg-slate-100">
+                                <ChevronRight className="w-4 h-4" />
+                            </Button>
+                        </div>
+                        <Button variant="ghost" onClick={handleToday} className="px-3 py-1 h-auto text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-full mr-3">
                             Today
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={handleNext} className="h-8 w-8 text-slate-600">
-                            <ChevronRight className="w-4 h-4" />
-                        </Button>
+                        <span className="text-sm font-semibold text-slate-700 min-w-[120px] text-center">
+                            {getDateRangeLabel()}
+                        </span>
                     </div>
-                    <span className="text-sm font-medium text-slate-600 min-w-[140px] text-center hidden md:block">
-                        {getDateRangeLabel()}
-                    </span>
                 </div>
 
                 <div className="flex items-center gap-3">
-                    <Badge variant="outline" className="text-slate-500 border-slate-200">
-                        Read Only
-                    </Badge>
+                    <Button
+                        size="sm"
+                        className="bg-blue-600 hover:bg-blue-700 text-white shadow-md rounded-lg"
+                        onClick={() => window.location.href = '/login'}
+                    >
+                        <LogIn className="w-4 h-4 mr-2" />
+                        Login
+                    </Button>
                 </div>
             </header>
 
             {/* Main Content Area */}
-            <div className="flex flex-1 overflow-hidden">
-                <main className="flex-1 flex flex-col relative animate-in fade-in duration-300">
+            <div className="flex flex-1 overflow-hidden relative">
+                <main className="flex-1 flex flex-col relative min-h-0">
                     {/* Toolbar */}
-                    <div className="h-12 border-b border-slate-100 bg-white flex items-center justify-between px-4">
-                        <div className="flex gap-2">
+                    <div className="h-14 border-b border-slate-100 bg-white/50 backdrop-blur-sm flex items-center justify-between px-6 z-10 flex-shrink-0">
+                        <div className="flex bg-slate-100 rounded-lg p-1 gap-1">
                             {(['week', 'month', 'list'] as const).map((mode) => (
-                                <Button
+                                <button
                                     key={mode}
-                                    variant={viewMode === mode ? 'secondary' : 'ghost'}
-                                    size="sm"
                                     onClick={() => setViewMode(mode as ViewMode)}
-                                    className={`text-xs font-semibold capitalize ${viewMode === mode ? 'bg-blue-50 text-blue-700 hover:bg-blue-100' : 'text-slate-500'}`}
+                                    className={`
+                                        px-3 py-1 text-xs font-semibold rounded-md capitalize transition-all
+                                        ${viewMode === mode ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}
+                                    `}
                                 >
                                     {mode}
-                                </Button>
+                                </button>
                             ))}
                         </div>
-                        {/* No actions in toolbar for public view */}
+
+                        <div className="text-xs text-slate-400 font-medium">
+                            Read-only access
+                        </div>
                     </div>
 
                     {renderView()}
