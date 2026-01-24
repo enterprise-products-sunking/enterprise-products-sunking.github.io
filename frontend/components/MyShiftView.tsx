@@ -17,6 +17,7 @@ import {
     Repeat
 } from 'lucide-react';
 import { format, isSameDay, isToday, isPast, startOfDay } from 'date-fns';
+import { motion, AnimatePresence } from 'framer-motion';
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -233,71 +234,58 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts }) => {
         <div className="flex-1 overflow-auto p-6 bg-gradient-to-br from-slate-50 to-slate-100/50">
             {/* Header */}
             <div className="mb-6">
-                <h1 className="text-2xl font-bold text-slate-900">My Shifts</h1>
-                <p className="text-sm text-slate-500 mt-1">Manage your schedule and exchange shifts with colleagues</p>
+                <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }}>
+                    <h1 className="text-2xl font-bold text-slate-900">My Shifts</h1>
+                    <p className="text-sm text-slate-500 mt-1">Manage your schedule and exchange shifts with colleagues</p>
+                </motion.div>
             </div>
 
             {/* Stats Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                <Card className="bg-white/80 backdrop-blur border-slate-200/60 shadow-sm hover:shadow-md transition-all">
-                    <CardContent className="p-5">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Today</p>
-                                <p className="text-3xl font-bold text-slate-900 mt-1">{currentCount}</p>
-                                <p className="text-xs text-slate-400 mt-1">active shifts</p>
-                            </div>
-                            <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
-                                <CheckCircle2 className="w-6 h-6 text-white" />
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="bg-white/80 backdrop-blur border-slate-200/60 shadow-sm hover:shadow-md transition-all">
-                    <CardContent className="p-5">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Upcoming</p>
-                                <p className="text-3xl font-bold text-slate-900 mt-1">{upcomingCount}</p>
-                                <p className="text-xs text-slate-400 mt-1">scheduled shifts</p>
-                            </div>
-                            <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-amber-500/20">
-                                <CalendarIcon className="w-6 h-6 text-white" />
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="bg-white/80 backdrop-blur border-slate-200/60 shadow-sm hover:shadow-md transition-all">
-                    <CardContent className="p-5">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Pending</p>
-                                <p className="text-3xl font-bold text-slate-900 mt-1">{pendingCount}</p>
-                                <p className="text-xs text-slate-400 mt-1">exchange requests</p>
-                            </div>
-                            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
-                                <Repeat className="w-6 h-6 text-white" />
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
+                {[
+                    { label: "Today", count: currentCount, sub: "active shifts", icon: CheckCircle2, color: "emerald" },
+                    { label: "Upcoming", count: upcomingCount, sub: "scheduled shifts", icon: CalendarIcon, color: "amber" },
+                    { label: "Pending", count: pendingCount, sub: "exchange requests", icon: Repeat, color: "blue" },
+                ].map((stat, i) => (
+                    <motion.div
+                        key={i}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.1 }}
+                    >
+                        <Card className="bg-white/80 backdrop-blur border-slate-200/60 shadow-sm hover:shadow-md transition-all">
+                            <CardContent className="p-5">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{stat.label}</p>
+                                        <p className="text-3xl font-bold text-slate-900 mt-1">{stat.count}</p>
+                                        <p className="text-xs text-slate-400 mt-1">{stat.sub}</p>
+                                    </div>
+                                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg bg-gradient-to-br from-${stat.color}-500 to-${stat.color}-600 shadow-${stat.color}-500/20`}>
+                                        <stat.icon className="w-6 h-6 text-white" />
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </motion.div>
+                ))}
             </div>
 
             {/* Main Content */}
-            <Card className="bg-white/90 backdrop-blur border-slate-200/60 shadow-sm">
+            <Card className="bg-white/90 backdrop-blur border-slate-200/60 shadow-sm overflow-hidden">
                 <Tabs defaultValue="my_shifts" className="w-full">
                     <CardHeader className="pb-0 border-b border-slate-100">
                         <TabsList variant="line" className="gap-0 bg-transparent p-0">
-                            <TabsTrigger value="my_shifts" className="px-6 py-3 text-sm font-medium data-[state=active]:border-b-2 data-[state=active]:border-blue-600 data-[state=active]:text-blue-600 data-[state=inactive]:text-slate-500 hover:text-slate-700 rounded-none bg-transparent">
+                            <TabsTrigger value="my_shifts" className="relative px-6 py-3 text-sm font-medium data-[state=active]:text-blue-600 data-[state=inactive]:text-slate-500 hover:text-slate-700 rounded-none bg-transparent">
                                 My Schedule
+                                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 opacity-0 transition-opacity data-[state=active]:opacity-100" />
                             </TabsTrigger>
-                            <TabsTrigger value="marketplace" className="px-6 py-3 text-sm font-medium data-[state=active]:border-b-2 data-[state=active]:border-blue-600 data-[state=active]:text-blue-600 data-[state=inactive]:text-slate-500 hover:text-slate-700 rounded-none bg-transparent flex items-center gap-2">
+                            <TabsTrigger value="marketplace" className="relative px-6 py-3 text-sm font-medium data-[state=active]:text-blue-600 data-[state=inactive]:text-slate-500 hover:text-slate-700 rounded-none bg-transparent flex items-center gap-2">
                                 Shift Exchange
                                 {marketShifts.length > 0 && (
                                     <span className="bg-blue-100 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded-full">{marketShifts.length}</span>
                                 )}
+                                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 opacity-0 transition-opacity data-[state=active]:opacity-100" />
                             </TabsTrigger>
                         </TabsList>
                     </CardHeader>
@@ -336,63 +324,76 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts }) => {
                                     </Button>
                                 </div>
 
-                                <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
-                                    {(selectedDate ? shiftsForSelectedDate : sortedShifts).length === 0 ? (
-                                        <div className="text-center py-12 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
-                                            <CalendarIcon className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                                            <p className="text-slate-500 font-medium">No shifts on this day</p>
-                                        </div>
-                                    ) : (
-                                        (selectedDate ? shiftsForSelectedDate : sortedShifts).map((shift) => {
-                                            const timeStatus = getShiftTimeStatus(shift.date);
-                                            const statusStyles = timeStatusStyles[timeStatus];
-                                            const dateBadgeStyle = getDateBadgeStyle(timeStatus);
+                                <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                                    <AnimatePresence mode='popLayout'>
+                                        {(selectedDate ? shiftsForSelectedDate : sortedShifts).length === 0 ? (
+                                            <motion.div
+                                                initial={{ opacity: 0, scale: 0.95 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                className="text-center py-12 bg-slate-50/50 rounded-xl border border-dashed border-slate-200"
+                                            >
+                                                <CalendarIcon className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                                                <p className="text-slate-500 font-medium">No shifts on this day</p>
+                                            </motion.div>
+                                        ) : (
+                                            (selectedDate ? shiftsForSelectedDate : sortedShifts).map((shift, idx) => {
+                                                const timeStatus = getShiftTimeStatus(shift.date);
+                                                const statusStyles = timeStatusStyles[timeStatus];
+                                                const dateBadgeStyle = getDateBadgeStyle(timeStatus);
 
-                                            return (
-                                                <div key={shift.id} className={`group rounded-xl p-4 border transition-all hover:shadow-md ${statusStyles.bg} ${statusStyles.border} ${timeStatus === 'past' ? 'opacity-70' : ''}`}>
-                                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                                        <div className="flex items-start gap-4">
-                                                            <div className={`w-14 h-14 rounded-xl flex flex-col items-center justify-center font-bold shadow-sm flex-shrink-0 ${dateBadgeStyle}`}>
-                                                                <span className="text-[10px] uppercase tracking-wide opacity-80">{format(shift.date, 'EEE')}</span>
-                                                                <span className="text-xl leading-none">{format(shift.date, 'd')}</span>
-                                                                <span className="text-[10px] uppercase tracking-wide opacity-80">{format(shift.date, 'MMM')}</span>
+                                                return (
+                                                    <motion.div
+                                                        key={shift.id}
+                                                        initial={{ opacity: 0, y: 10 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        exit={{ opacity: 0, scale: 0.95 }}
+                                                        transition={{ delay: idx * 0.05 }}
+                                                        className={`group rounded-xl p-4 border transition-all hover:shadow-md ${statusStyles.bg} ${statusStyles.border} ${timeStatus === 'past' ? 'opacity-70' : ''}`}
+                                                    >
+                                                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                                            <div className="flex items-start gap-4">
+                                                                <div className={`w-14 h-14 rounded-xl flex flex-col items-center justify-center font-bold shadow-sm flex-shrink-0 ${dateBadgeStyle}`}>
+                                                                    <span className="text-[10px] uppercase tracking-wide opacity-80">{format(shift.date, 'EEE')}</span>
+                                                                    <span className="text-xl leading-none">{format(shift.date, 'd')}</span>
+                                                                    <span className="text-[10px] uppercase tracking-wide opacity-80">{format(shift.date, 'MMM')}</span>
+                                                                </div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="flex items-center gap-2 flex-wrap mb-2">
+                                                                        <h3 className={`font-semibold text-slate-800 ${timeStatus === 'past' ? 'text-slate-500' : ''}`}>{shift.title}</h3>
+                                                                        <Badge variant="outline" className={`text-xs font-medium ${statusStyles.badge}`}>{statusStyles.label}</Badge>
+                                                                        {shift.status === 'pending_switch' && (
+                                                                            <Badge variant="outline" className="text-xs font-medium bg-blue-100 text-blue-700 border-blue-200">
+                                                                                <Repeat className="w-3 h-3 mr-1" /> Pending Exchange
+                                                                            </Badge>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="flex flex-wrap gap-4 text-sm text-slate-500">
+                                                                        <div className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-slate-400" /><span>{shift.startTime} - {shift.endTime}</span></div>
+                                                                        <div className="flex items-center gap-1.5"><MapPin className="w-4 h-4 text-slate-400" /><span>{shift.location}</span></div>
+                                                                    </div>
+                                                                </div>
                                                             </div>
-                                                            <div className="flex-1 min-w-0">
-                                                                <div className="flex items-center gap-2 flex-wrap mb-2">
-                                                                    <h3 className={`font-semibold text-slate-800 ${timeStatus === 'past' ? 'text-slate-500' : ''}`}>{shift.title}</h3>
-                                                                    <Badge variant="outline" className={`text-xs font-medium ${statusStyles.badge}`}>{statusStyles.label}</Badge>
-                                                                    {shift.status === 'pending_switch' && (
-                                                                        <Badge variant="outline" className="text-xs font-medium bg-blue-100 text-blue-700 border-blue-200">
-                                                                            <Repeat className="w-3 h-3 mr-1" /> Pending Exchange
-                                                                        </Badge>
-                                                                    )}
-                                                                </div>
-                                                                <div className="flex flex-wrap gap-4 text-sm text-slate-500">
-                                                                    <div className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-slate-400" /><span>{shift.startTime} - {shift.endTime}</span></div>
-                                                                    <div className="flex items-center gap-1.5"><MapPin className="w-4 h-4 text-slate-400" /><span>{shift.location}</span></div>
-                                                                </div>
+
+                                                            <div className="flex items-center gap-2 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                {timeStatus !== 'past' && shift.status === 'scheduled' && (
+                                                                    <Button variant="outline" size="sm" onClick={() => handleRequestSwitch(shift)} className="border-blue-200 text-blue-600 hover:bg-blue-50 hover:border-blue-300">
+                                                                        <ArrowLeftRight className="w-4 h-4 mr-2" />
+                                                                        Exchange Shift
+                                                                    </Button>
+                                                                )}
+                                                                {shift.status === 'pending_switch' && (
+                                                                    <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full">
+                                                                        <Clock className="w-4 h-4" />
+                                                                        <span className="font-medium">Awaiting exchange</span>
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         </div>
-
-                                                        <div className="flex items-center gap-2 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            {timeStatus !== 'past' && shift.status === 'scheduled' && (
-                                                                <Button variant="outline" size="sm" onClick={() => handleRequestSwitch(shift)} className="border-blue-200 text-blue-600 hover:bg-blue-50 hover:border-blue-300">
-                                                                    <ArrowLeftRight className="w-4 h-4 mr-2" />
-                                                                    Exchange Shift
-                                                                </Button>
-                                                            )}
-                                                            {shift.status === 'pending_switch' && (
-                                                                <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full">
-                                                                    <Clock className="w-4 h-4" />
-                                                                    <span className="font-medium">Awaiting exchange</span>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })
-                                    )}
+                                                    </motion.div>
+                                                );
+                                            })
+                                        )}
+                                    </AnimatePresence>
                                 </div>
                             </div>
                         </div>
@@ -421,8 +422,14 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts }) => {
                                 </div>
                             ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {marketShifts.map((shift) => (
-                                        <div key={shift.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden hover:shadow-md transition-all">
+                                    {marketShifts.map((shift, i) => (
+                                        <motion.div
+                                            key={shift.id}
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: i * 0.1 }}
+                                            className="bg-white border border-slate-200 rounded-xl overflow-hidden hover:shadow-md transition-all"
+                                        >
                                             <div className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white text-xs font-semibold px-3 py-1.5 flex items-center gap-1.5">
                                                 <Repeat className="w-3.5 h-3.5" />
                                                 Available for Exchange
@@ -468,7 +475,7 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts }) => {
                                                     Propose Exchange
                                                 </Button>
                                             </div>
-                                        </div>
+                                        </motion.div>
                                     ))}
                                 </div>
                             )}
@@ -585,14 +592,14 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts }) => {
                                         <p className="text-xs text-slate-400">You need scheduled upcoming shifts</p>
                                     </div>
                                 ) : (
-                                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                                    <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
                                         {eligibleShiftsForExchange.map((shift) => (
                                             <button
                                                 key={shift.id}
                                                 onClick={() => setShiftToOffer(shift)}
                                                 className={`w-full text-left border rounded-xl p-3 flex items-center gap-3 transition-all ${shiftToOffer?.id === shift.id
-                                                        ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
-                                                        : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                                                    ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
+                                                    : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                                                     }`}
                                             >
                                                 <div className={`w-10 h-10 rounded-lg flex flex-col items-center justify-center ${shiftToOffer?.id === shift.id ? 'bg-blue-100' : 'bg-slate-100'

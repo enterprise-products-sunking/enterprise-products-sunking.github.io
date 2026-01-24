@@ -149,6 +149,14 @@ const PublicScheduleView: React.FC = () => {
                     <Badge variant="outline" className="text-slate-500 border-slate-200">
                         Read Only
                     </Badge>
+                    <Button
+                        size="sm"
+                        variant="default"
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-sm"
+                        onClick={() => window.location.href = '/login'}
+                    >
+                        Login
+                    </Button>
                 </div>
             </header>
 
