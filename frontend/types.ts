@@ -14,6 +14,7 @@ export enum UserRole {
 export enum ShiftStatus {
     Confirmed = 'confirmed',
     Pending = 'pending',
+    PendingConfirmation = 'pending_confirmation',
     RequestedOff = 'requested_off',
     Open = 'open'
 }
@@ -33,11 +34,18 @@ export interface Employee {
 
 export interface Shift {
     id: string;
+    assignmentId?: string;
     employeeId: string | null; // null for open shifts
+    assignedUser?: {
+        id: string;
+        name: string;
+        email: string;
+    };
     start: Date;
     end: Date;
     role: string;
     status: ShiftStatus;
+    rawStatus?: string;
     notes?: string;
     isDragging?: boolean;
 }

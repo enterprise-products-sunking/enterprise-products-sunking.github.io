@@ -70,21 +70,21 @@ const ListView: React.FC<ListViewProps> = ({ currentDate, shifts, employees, onS
                                                     ) : (
                                                         <Avatar className="h-10 w-10 border border-slate-200">
                                                             <AvatarImage src={employee?.avatar} />
-                                                            <AvatarFallback className={`bg-${employee?.color}-100 text-${employee?.color}-600`}>
-                                                                {employee?.name.charAt(0)}
+                                                            <AvatarFallback className="bg-slate-100 text-slate-600 font-bold">
+                                                                {(employee?.name || shift.assignedUser?.name || '?').charAt(0).toUpperCase()}
                                                             </AvatarFallback>
                                                         </Avatar>
                                                     )}
 
                                                     <div>
                                                         <div className={cn("font-medium", isUnassigned ? 'text-slate-500 italic' : 'text-slate-900')}>
-                                                            {employee ? employee.name : 'Unassigned'}
+                                                            {employee?.name || shift.assignedUser?.name || 'Assigned'}
                                                         </div>
                                                         <div className="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5">
                                                             <Badge variant="outline" className="text-blue-600 bg-blue-50 border-blue-100 font-normal">
                                                                 {shift.role}
                                                             </Badge>
-                                                            {shift.status === ShiftStatus.Pending && (
+                                                            {(shift.status === ShiftStatus.Pending || shift.status === ShiftStatus.PendingConfirmation) && (
                                                                 <Badge variant="secondary" className="text-amber-700 bg-amber-50 hover:bg-amber-100">
                                                                     Pending
                                                                 </Badge>

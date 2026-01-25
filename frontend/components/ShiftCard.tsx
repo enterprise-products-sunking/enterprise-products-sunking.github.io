@@ -16,13 +16,17 @@ interface ShiftCardProps {
 
 const ShiftCard: React.FC<ShiftCardProps> = ({ shift, employee, onClick, onDragStart, readOnly }) => {
     const isUnassigned = !shift.employeeId;
-
     let colorClasses = "bg-white border-slate-200 text-slate-700";
+
+    const isPending = shift.status === ShiftStatus.Pending || shift.status === ShiftStatus.PendingConfirmation;
+    const isConfirmed = shift.status === ShiftStatus.Confirmed;
 
     if (isUnassigned) {
         colorClasses = "bg-slate-50 border-dashed border-slate-300 text-slate-500";
-    } else if (shift.status === ShiftStatus.Pending) {
-        colorClasses = "bg-amber-50 border-amber-200 text-amber-800";
+    } else if (isConfirmed) {
+        colorClasses = "bg-emerald-50 border-emerald-200 text-emerald-800 ring-emerald-500/30";
+    } else if (isPending) {
+        colorClasses = "bg-amber-50 border-amber-200 text-amber-800 ring-amber-500/30";
     } else if (employee) {
         const colorMap: Record<string, string> = {
             blue: 'bg-blue-50 border-blue-200 text-blue-900',
@@ -65,10 +69,16 @@ const ShiftCard: React.FC<ShiftCardProps> = ({ shift, employee, onClick, onDragS
                     <span className="italic text-slate-500 text-[10px] truncate">Open</span>
                 ) : (
                     <div className="flex items-center gap-1.5 min-w-0">
-                        {employee?.avatar && (
+                        {employee?.avatar ? (
                             <img src={employee.avatar} alt="" className="w-4 h-4 rounded-full flex-shrink-0" />
+                        ) : (
+                            <div className="w-4 h-4 rounded-full bg-slate-200 text-[8px] flex items-center justify-center font-bold text-slate-600 flex-shrink-0">
+                                {(employee?.name || shift.assignedUser?.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                            </div>
                         )}
-                        <span className="truncate text-[10px] font-semibold">{employee?.name}</span>
+                        <span className="truncate text-[10px] font-semibold">
+                            {employee?.name || shift.assignedUser?.name || 'Assigned'}
+                        </span>
                     </div>
                 )}
                 {/* Role only visible if enough height, crudely handled by flex */}

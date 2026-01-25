@@ -26,17 +26,50 @@ const PublicScheduleView: React.FC = () => {
 
     // Data State
     const [shifts, setShifts] = useState<Shift[]>([]);
-    const [employees] = useState<Employee[]>(EMPLOYEES);
+    const [employees, setEmployees] = useState<Employee[]>([]);
+    const [isLoadingData, setIsLoadingData] = useState(true);
 
     // View State
     const [currentDate, setCurrentDate] = useState<Date>(new Date());
     const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.Week);
 
-    // Effect for hydration
+    // Effect for hydration and data fetching
     useEffect(() => {
         setMounted(true);
-        setShifts(getInitialShifts());
         setCurrentDate(new Date());
+
+        const fetchData = async () => {
+            setIsLoadingData(true);
+            try {
+                const { shiftService } = await import('@/services/shiftService');
+                const { userService } = await import('@/services/userService');
+
+                let realShifts: Shift[] = [];
+                let realEmployees: Employee[] = [];
+
+                try {
+                    realShifts = await shiftService.listAllShifts();
+                } catch (err) {
+                    console.warn("Could not fetch public shifts", err);
+                    realShifts = getInitialShifts();
+                }
+
+                // In public view, we don't fetch the full user list to avoid permission errors.
+                // Shift objects already contain basic assignedUser info.
+                realEmployees = EMPLOYEES;
+
+                setShifts(realShifts);
+                setEmployees(realEmployees);
+            } catch (error) {
+                console.error("Critical error in public schedule fetch:", error);
+                setShifts(getInitialShifts());
+                setEmployees(EMPLOYEES);
+            } finally {
+                setIsLoadingData(false);
+            }
+        };
+
+        fetchData();
     }, []);
 
     if (!mounted) return null;
@@ -162,31 +195,40 @@ const PublicScheduleView: React.FC = () => {
 
             {/* Main Content Area */}
             <div className="flex flex-1 overflow-hidden relative">
-                <main className="flex-1 flex flex-col relative min-h-0">
-                    {/* Toolbar */}
-                    <div className="h-14 border-b border-slate-100 bg-white/50 backdrop-blur-sm flex items-center justify-between px-6 z-10 flex-shrink-0">
-                        <div className="flex bg-slate-100 rounded-lg p-1 gap-1">
-                            {(['week', 'month', 'list'] as const).map((mode) => (
-                                <button
-                                    key={mode}
-                                    onClick={() => setViewMode(mode as ViewMode)}
-                                    className={`
-                                        px-3 py-1 text-xs font-semibold rounded-md capitalize transition-all
-                                        ${viewMode === mode ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}
-                                    `}
-                                >
-                                    {mode}
-                                </button>
-                            ))}
-                        </div>
-
-                        <div className="text-xs text-slate-400 font-medium">
-                            Read-only access
+                {isLoadingData ? (
+                    <div className="flex-1 flex items-center justify-center bg-white/50 backdrop-blur-sm z-50 absolute inset-0">
+                        <div className="flex flex-col items-center gap-4">
+                            <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                            <p className="text-slate-500 font-medium animate-pulse">Syncing schedule...</p>
                         </div>
                     </div>
+                ) : (
+                    <main className="flex-1 flex flex-col relative min-h-0">
+                        {/* Toolbar */}
+                        <div className="h-14 border-b border-slate-100 bg-white/50 backdrop-blur-sm flex items-center justify-between px-6 z-10 flex-shrink-0">
+                            <div className="flex bg-slate-100 rounded-lg p-1 gap-1">
+                                {(['week', 'month', 'list'] as const).map((mode) => (
+                                    <button
+                                        key={mode}
+                                        onClick={() => setViewMode(mode as ViewMode)}
+                                        className={`
+                                            px-3 py-1 text-xs font-semibold rounded-md capitalize transition-all
+                                            ${viewMode === mode ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}
+                                        `}
+                                    >
+                                        {mode}
+                                    </button>
+                                ))}
+                            </div>
 
-                    {renderView()}
-                </main>
+                            <div className="text-xs text-slate-400 font-medium">
+                                Read-only access
+                            </div>
+                        </div>
+
+                        {renderView()}
+                    </main>
+                )}
             </div>
         </div>
     );

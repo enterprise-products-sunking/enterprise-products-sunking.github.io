@@ -29,6 +29,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Briefcase } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { shiftService } from '@/services/shiftService';
+import { userService } from '@/services/userService';
 
 const ShiftSyncShell: React.FC = () => {
     // 1. All Hooks declarations must be at the top level
@@ -36,11 +38,15 @@ const ShiftSyncShell: React.FC = () => {
 
     // Data State
     const [shifts, setShifts] = useState<Shift[]>([]);
-    const [employees, setEmployees] = useState<Employee[]>(EMPLOYEES);
+    const [myShifts, setMyShifts] = useState<Shift[]>([]);
+    const [marketplaceShifts, setMarketplaceShifts] = useState<any[]>([]);
+    const [employees, setEmployees] = useState<Employee[]>([]);
+    const [currentUser, setCurrentUser] = useState<Employee | null>(null);
+    const [isLoadingData, setIsLoadingData] = useState(true);
 
     // View State
     const [currentDate, setCurrentDate] = useState<Date>(new Date());
-    const [userRole, setUserRole] = useState<UserRole>(UserRole.Admin);
+    const [userRole, setUserRole] = useState<UserRole | null>(null);
     const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.Week);
 
     // Navigation State
@@ -53,12 +59,79 @@ const ShiftSyncShell: React.FC = () => {
     const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
     const [selectedMember, setSelectedMember] = useState<Partial<Employee> | null>(null);
 
-    // Effect for hydration
+    const refreshData = React.useCallback(async () => {
+        setIsLoadingData(true);
+        try {
+            // Fetch User Profile
+            try {
+                const profile = await userService.getMyProfile();
+                setCurrentUser(profile);
+            } catch (e) {
+                console.warn("Failed to fetch user profile", e);
+            }
+
+            const storedRole = localStorage.getItem("user_role");
+
+            // Prepare fetch promises with individual error handling
+            const globalShiftsPromise = shiftService.listAllShifts().catch(err => {
+                console.warn("Global shifts fetch skipped or restricted:", err.message);
+                return [];
+            });
+
+            const myShiftsPromise = shiftService.listMyShifts().catch(err => {
+                console.warn("Personal shifts fetch failed:", err.message);
+                return [];
+            });
+
+            const marketplacePromise = shiftService.listMarketplace().catch(err => {
+                console.warn("Marketplace fetch failed:", err.message);
+                return [];
+            });
+
+            const employeesPromise = (storedRole === 'admin')
+                ? userService.listUsers().catch(() => EMPLOYEES)
+                : Promise.resolve(EMPLOYEES);
+
+            // Execute all in parallel
+            const [allResults, myResults, marketResults, empResults] = await Promise.all([
+                globalShiftsPromise,
+                myShiftsPromise,
+                marketplacePromise,
+                employeesPromise
+            ]);
+
+            // Update state
+            setShifts(allResults.length > 0 ? allResults : getInitialShifts());
+            setMyShifts(myResults);
+            setMarketplaceShifts(marketResults);
+            setEmployees(empResults);
+        } catch (error: any) {
+            console.error("Critical error in fetchData:", error);
+            setShifts(getInitialShifts());
+            setEmployees(EMPLOYEES);
+            toast.error("Demonstration mode: Limited permissions or backend offline.");
+        } finally {
+            setIsLoadingData(false);
+        }
+    }, []);
+
+    // Effect for hydration and loading data
     useEffect(() => {
         setMounted(true);
-        setShifts(getInitialShifts());
         setCurrentDate(new Date());
-    }, []);
+
+        // Load role from localStorage
+        const storedRole = localStorage.getItem("user_role");
+        if (storedRole === 'admin') {
+            setUserRole(UserRole.Admin);
+        } else if (storedRole === 'member') {
+            setUserRole(UserRole.Employee);
+        } else {
+            setUserRole(UserRole.Employee); // Default to employee/member
+        }
+
+        refreshData();
+    }, [refreshData]);
 
     // 2. Early return AFTER all hooks
     if (!mounted) return null;
@@ -80,6 +153,40 @@ const ShiftSyncShell: React.FC = () => {
     const handleShiftClick = (shift: Shift) => {
         setSelectedShift(shift);
         setIsShiftModalOpen(true);
+    };
+
+    const handleApproveShift = async (id: string) => {
+        try {
+            await shiftService.approveShift(id);
+            toast.success("Shift approved successfully");
+
+            // Update both global and personal lists
+            const updateList = (prev: Shift[]) => prev.map(s =>
+                s.id === id ? { ...s, status: ShiftStatus.Confirmed } : s
+            );
+
+            setShifts(updateList);
+            setMyShifts(updateList);
+            setIsShiftModalOpen(false);
+        } catch (error: any) {
+            toast.error("Failed to approve shift: " + error.message);
+        }
+    };
+
+    const handleRejectShift = async (id: string) => {
+        try {
+            await shiftService.rejectShift(id);
+            toast.info("Shift rejected");
+
+            // Remove from both lists
+            const filterList = (prev: Shift[]) => prev.filter(s => s.id !== id);
+
+            setShifts(filterList);
+            setMyShifts(filterList);
+            setIsShiftModalOpen(false);
+        } catch (error: any) {
+            toast.error("Failed to reject shift: " + error.message);
+        }
     };
 
     const handleShiftCreate = (start: Date, end?: Date, employeeId?: string) => {
@@ -248,8 +355,8 @@ const ShiftSyncShell: React.FC = () => {
     const tabs = [
         { id: 'calendar', label: 'Calendar', icon: null },
         { id: 'my_shift', label: 'My Shift', icon: Briefcase },
-        { id: 'members', label: 'Members', icon: Users },
-    ] as const;
+        { id: 'members', label: 'Members', icon: Users, adminOnly: true },
+    ].filter(tab => !tab.adminOnly || userRole === UserRole.Admin);
 
     return (
         <div className="flex flex-col h-screen bg-slate-50/50">
@@ -271,7 +378,6 @@ const ShiftSyncShell: React.FC = () => {
                                 key={tab.id}
                                 onClick={() => {
                                     setActiveTab(tab.id as any);
-                                    if (tab.id === 'calendar') setUserRole(UserRole.Admin);
                                 }}
                                 className={`
                                     relative px-4 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 z-10 flex items-center gap-2
@@ -328,12 +434,17 @@ const ShiftSyncShell: React.FC = () => {
 
                     <div className="flex items-center gap-2 pl-4 border-l border-slate-200">
                         <div className="text-right hidden md:block">
-                            <p className="text-sm font-semibold text-slate-700 leading-none">Admin User</p>
-                            <p className="text-xs text-slate-400 mt-1">Super Admin</p>
+                            <p className="text-sm font-semibold text-slate-700 leading-none">
+                                {currentUser?.name || (userRole === UserRole.Admin ? 'Admin User' : 'Staff Member')}
+                            </p>
+                            <p className="text-xs text-slate-400 mt-1">
+                                {userRole === UserRole.Admin ? 'System Administrator' : 'Shift Employee'}
+                            </p>
                         </div>
                         <Avatar className="h-9 w-9 border-2 border-white shadow-sm ring-1 ring-slate-100">
-                            <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
-                                AD
+                            <AvatarImage src={currentUser?.avatar} alt={currentUser?.name} />
+                            <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white uppercase font-bold text-xs">
+                                {currentUser?.name?.split(' ').map(n => n[0]).join('').slice(0, 2) || '??'}
                             </AvatarFallback>
                         </Avatar>
                     </div>
@@ -343,63 +454,79 @@ const ShiftSyncShell: React.FC = () => {
             {/* Main Content Area */}
             <div className="flex flex-1 overflow-hidden relative">
                 <AnimatePresence mode="wait">
-                    <motion.div
-                        key={activeTab}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.2 }}
-                        className="w-full h-full flex flex-col min-h-0"
-                    >
-                        {activeTab === 'members' ? (
-                            <MembersView
-                                employees={employees}
-                                onAddMember={handleAddMember}
-                                onEditMember={handleEditMember}
-                            />
-                        ) : activeTab === 'my_shift' ? (
-                            <MyShiftView
-                                employees={employees}
-                                shifts={shifts}
-                            />
-                        ) : (
-                            /* Calendar Container */
-                            <main className="flex-1 flex flex-col relative min-h-0">
-                                {/* Toolbar */}
-                                <div className="h-14 border-b border-slate-100 bg-white/50 backdrop-blur-sm flex items-center justify-between px-6 z-10 flex-shrink-0">
-                                    <div className="flex bg-slate-100 rounded-lg p-1 gap-1">
-                                        {(['week', 'month', 'list'] as const).map((mode) => (
-                                            <button
-                                                key={mode}
-                                                onClick={() => setViewMode(mode as ViewMode)}
-                                                className={`
-                                                    px-3 py-1 text-xs font-semibold rounded-md capitalize transition-all
-                                                    ${viewMode === mode ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}
-                                                `}
-                                            >
-                                                {mode}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <div className="flex gap-3">
-                                        {userRole === UserRole.Admin && (
-                                            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                                                <Button
-                                                    size="sm"
-                                                    onClick={() => handleShiftCreate(new Date())}
-                                                    className="bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 text-xs gap-1.5 font-medium px-4 h-9 rounded-lg"
+                    {isLoadingData ? (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="flex-1 flex items-center justify-center bg-white/50 backdrop-blur-sm z-50 absolute inset-0"
+                        >
+                            <div className="flex flex-col items-center gap-4">
+                                <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                                <p className="text-slate-500 font-medium animate-pulse">Syncing schedule...</p>
+                            </div>
+                        </motion.div>
+                    ) : (
+                        <motion.div
+                            key={activeTab}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            transition={{ duration: 0.2 }}
+                            className="w-full h-full flex flex-col min-h-0"
+                        >
+                            {activeTab === 'members' ? (
+                                <MembersView
+                                    employees={employees}
+                                    onAddMember={handleAddMember}
+                                    onEditMember={handleEditMember}
+                                />
+                            ) : activeTab === 'my_shift' ? (
+                                <MyShiftView
+                                    employees={employees}
+                                    shifts={myShifts}
+                                    marketplaceShifts={marketplaceShifts}
+                                    onRefresh={refreshData}
+                                />
+                            ) : (
+                                /* Calendar Container */
+                                <main className="flex-1 flex flex-col relative min-h-0">
+                                    {/* Toolbar */}
+                                    <div className="h-14 border-b border-slate-100 bg-white/50 backdrop-blur-sm flex items-center justify-between px-6 z-10 flex-shrink-0">
+                                        <div className="flex bg-slate-100 rounded-lg p-1 gap-1">
+                                            {(['week', 'month', 'list'] as const).map((mode) => (
+                                                <button
+                                                    key={mode}
+                                                    onClick={() => setViewMode(mode as ViewMode)}
+                                                    className={`
+                                                        px-3 py-1 text-xs font-semibold rounded-md capitalize transition-all
+                                                        ${viewMode === mode ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}
+                                                    `}
                                                 >
-                                                    <Plus className="w-4 h-4" /> New Shift
-                                                </Button>
-                                            </motion.div>
-                                        )}
+                                                    {mode}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <div className="flex gap-3">
+                                            {userRole === UserRole.Admin && (
+                                                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                                                    <Button
+                                                        size="sm"
+                                                        onClick={() => handleShiftCreate(new Date())}
+                                                        className="bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 text-xs gap-1.5 font-medium px-4 h-9 rounded-lg"
+                                                    >
+                                                        <Plus className="w-4 h-4" /> New Shift
+                                                    </Button>
+                                                </motion.div>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
 
-                                {renderView()}
-                            </main>
-                        )}
-                    </motion.div>
+                                    {renderView()}
+                                </main>
+                            )}
+                        </motion.div>
+                    )}
                 </AnimatePresence>
             </div>
 
@@ -411,6 +538,9 @@ const ShiftSyncShell: React.FC = () => {
                 onClose={() => setIsShiftModalOpen(false)}
                 onSave={handleSaveShift}
                 onDelete={handleDeleteShift}
+                onApprove={handleApproveShift}
+                onReject={handleRejectShift}
+                userRole={userRole}
             />
 
             <MemberModal
