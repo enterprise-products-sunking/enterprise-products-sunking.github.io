@@ -36,6 +36,7 @@ const mapAssignmentToShift = (assignment: AssignmentResponse): Shift => {
 
     return {
         id: assignment.id, // Use the Assignment ID as the primary unique ID
+        shiftId: assignment.shift_id,
         assignmentId: assignment.id,
         employeeId: assignment.user_id,
         assignedUser: assignment.user ? {
@@ -100,6 +101,38 @@ export const shiftService = {
         return await apiRequest(`/swaps/${swapId}/propose`, {
             method: "POST",
             body: JSON.stringify({ target_shift_assignment_id: targetAssignmentId })
+        });
+    },
+
+    createShift: async (data: {
+        title: string;
+        assigned_user_id: string | null;
+        start_time: string;
+        end_time: string;
+        notes?: string;
+    }) => {
+        return await apiRequest("/shifts", {
+            method: "POST",
+            body: JSON.stringify(data)
+        });
+    },
+
+    updateShift: async (id: string, data: {
+        title?: string;
+        assigned_user_id?: string | null;
+        start_time?: string;
+        end_time?: string;
+        notes?: string | null;
+    }) => {
+        return await apiRequest(`/shifts/${id}`, {
+            method: "PUT",
+            body: JSON.stringify(data)
+        });
+    },
+
+    deleteShift: async (id: string) => {
+        return await apiRequest(`/shifts/${id}`, {
+            method: "DELETE"
         });
     }
 };

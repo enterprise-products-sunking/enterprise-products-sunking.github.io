@@ -34,7 +34,8 @@ export interface Employee {
 }
 
 export interface Shift {
-    id: string;
+    id: string; // This is the unique identifier for UI (Assignment ID or temporary ID)
+    shiftId?: string; // The ID of the actual shift in the backend
     assignmentId?: string;
     employeeId: string | null; // null for open shifts
     assignedUser?: {

@@ -11,7 +11,8 @@ import {
     UserCircle,
     Users,
     LogOut,
-    Settings
+    Settings,
+    RotateCw
 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -65,6 +66,20 @@ const ShiftSyncShell: React.FC = () => {
 
     // Navigation State
     const [activeTab, setActiveTab] = useState<'calendar' | 'members' | 'my_shift'>('calendar');
+
+    // Effect for activeTab persistence
+    useEffect(() => {
+        const savedTab = localStorage.getItem('activeTab') as 'calendar' | 'members' | 'my_shift';
+        if (savedTab && ['calendar', 'members', 'my_shift'].includes(savedTab)) {
+            setActiveTab(savedTab);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (mounted) {
+            localStorage.setItem('activeTab', activeTab);
+        }
+    }, [activeTab, mounted]);
 
     // Modal States
     const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
@@ -218,64 +233,91 @@ const ShiftSyncShell: React.FC = () => {
         setIsShiftModalOpen(true);
     };
 
-    const handleShiftMove = (shiftId: string, newStart: Date, newEnd: Date) => {
-        setShifts(prev => prev.map(s =>
-            s.id === shiftId ? { ...s, start: newStart, end: newEnd } : s
-        ));
-        toast.success('Shift moved');
+    const handleShiftMove = async (shiftId: string, newStart: Date, newEnd: Date) => {
+        try {
+            const shift = shifts.find(s => s.id === shiftId);
+            const actualShiftId = shift?.shiftId || shiftId;
+
+            await shiftService.updateShift(actualShiftId, {
+                start_time: newStart.toISOString(),
+                end_time: newEnd.toISOString()
+            });
+            toast.success('Shift moved');
+            refreshData();
+        } catch (error: any) {
+            toast.error("Failed to move shift: " + error.message);
+        }
     };
 
-    const handleAssignEmployee = (shiftId: string, employeeId: string) => {
-        setShifts(prev => prev.map(s =>
-            s.id === shiftId ? { ...s, employeeId } : s
-        ));
-        toast.success('Assigned employee to shift');
+    const handleAssignEmployee = async (shiftId: string, employeeId: string) => {
+        try {
+            const shift = shifts.find(s => s.id === shiftId);
+            const actualShiftId = shift?.shiftId || shiftId;
+
+            await shiftService.updateShift(actualShiftId, {
+                assigned_user_id: employeeId === "open" ? null : employeeId
+            });
+            toast.success('Employee assigned');
+            refreshData();
+        } catch (error: any) {
+            toast.error("Failed to assign employee: " + error.message);
+        }
     };
 
     const handleAddEmployeeToSlot = (start: Date, employeeId: string) => {
         handleShiftCreate(start, undefined, employeeId);
     };
 
-    const handleSaveShift = (data: Partial<Shift> | Partial<Shift>[]) => {
+    const handleSaveShift = async (data: Partial<Shift> | Partial<Shift>[]) => {
         const itemsToSave = Array.isArray(data) ? data : [data];
 
-        // Check if any item is an update (has ID)
-        const updates = itemsToSave.filter(s => s.id);
-        const creates = itemsToSave.filter(s => !s.id);
+        try {
+            for (const item of itemsToSave) {
+                if (item.id) {
+                    // Update - use shiftId if available
+                    const actualShiftId = item.shiftId || item.id;
+                    await shiftService.updateShift(actualShiftId, {
+                        title: item.role,
+                        assigned_user_id: item.employeeId,
+                        start_time: item.start?.toISOString(),
+                        end_time: item.end?.toISOString(),
+                        notes: item.notes
+                    });
+                } else {
+                    // Create
+                    await shiftService.createShift({
+                        title: item.role || 'Staff',
+                        assigned_user_id: item.employeeId || null,
+                        start_time: item.start!.toISOString(),
+                        end_time: item.end!.toISOString(),
+                        notes: item.notes
+                    });
+                }
+            }
 
-        setShifts(prev => {
-            let nextShifts = [...prev];
+            if (itemsToSave.length > 0) {
+                toast.success(itemsToSave.length > 1 ? 'Shifts saved' : (itemsToSave[0].id ? 'Shift updated' : 'Shift created'));
+            }
 
-            // Handle Updates
-            updates.forEach(update => {
-                nextShifts = nextShifts.map(s => s.id === update.id ? { ...s, ...update } as Shift : s);
-            });
-
-            // Handle Creates
-            creates.forEach((create, idx) => {
-                const newShift: Shift = {
-                    ...create,
-                    id: `new-${Date.now()}-${idx}`,
-                    status: create.status || ShiftStatus.Pending,
-                    employeeId: create.employeeId || null,
-                } as Shift;
-                nextShifts.push(newShift);
-            });
-
-            return nextShifts;
-        });
-
-        if (updates.length > 0 && creates.length === 0) toast.success('Shift updated');
-        else if (creates.length > 0 && updates.length === 0) toast.success(`${creates.length} shift(s) created`);
-        else toast.success('Shifts saved');
-
-        setIsShiftModalOpen(false);
+            refreshData();
+            setIsShiftModalOpen(false);
+        } catch (error: any) {
+            toast.error("Failed to save shift: " + error.message);
+        }
     };
 
-    const handleDeleteShift = (id: string) => {
-        setShifts(prev => prev.filter(s => s.id !== id));
-        setIsShiftModalOpen(false);
-        toast.success('Shift deleted');
+    const handleDeleteShift = async (id: string) => {
+        try {
+            const shift = shifts.find(s => s.id === id);
+            const actualShiftId = shift?.shiftId || id;
+
+            await shiftService.deleteShift(actualShiftId);
+            toast.success('Shift deleted');
+            refreshData();
+            setIsShiftModalOpen(false);
+        } catch (error: any) {
+            toast.error("Failed to delete shift: " + error.message);
+        }
     };
 
     // --- Member Handlers ---
@@ -460,6 +502,16 @@ const ShiftSyncShell: React.FC = () => {
                 )}
 
                 <div className="flex items-center gap-3">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={refreshData}
+                        className={`text-slate-400 hover:text-blue-600 hover:bg-blue-50/50 transition-all ${isLoadingData ? 'animate-spin text-blue-600' : ''}`}
+                        title="Refresh Data"
+                    >
+                        <RotateCw className="w-5 h-5" />
+                    </Button>
+
                     <Button variant="ghost" size="icon" className="relative text-slate-400 hover:text-slate-600 hover:bg-white/50">
                         <Bell className="w-5 h-5" />
                         <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white/50"></span>
