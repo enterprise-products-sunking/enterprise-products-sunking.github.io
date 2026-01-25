@@ -46,6 +46,12 @@ import { userService } from '@/services/userService';
 import { authService } from '@/services/authService';
 import { getTimezoneAbbreviation } from '@/lib/timezone';
 
+const TOAST_STYLES = {
+    PENDING: { background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1864ab' },
+    SUCCESS: { background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534' },
+    ERROR: { background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b' }
+};
+
 const ShiftSyncShell: React.FC = () => {
     // 1. All Hooks declarations must be at the top level
     const [mounted, setMounted] = useState(false);
@@ -188,36 +194,26 @@ const ShiftSyncShell: React.FC = () => {
     };
 
     const handleApproveShift = async (id: string) => {
+        const toastId = toast.loading("Approving shift...", { style: TOAST_STYLES.PENDING });
+        setIsShiftModalOpen(false);
         try {
             await shiftService.approveShift(id);
-            toast.success("Shift approved successfully");
-
-            // Update both global and personal lists
-            const updateList = (prev: Shift[]) => prev.map(s =>
-                s.id === id ? { ...s, status: ShiftStatus.Confirmed } : s
-            );
-
-            setShifts(updateList);
-            setMyShifts(updateList);
-            setIsShiftModalOpen(false);
+            toast.success("Shift approved successfully", { id: toastId, style: TOAST_STYLES.SUCCESS });
+            refreshData();
         } catch (error: any) {
-            toast.error("Failed to approve shift: " + error.message);
+            toast.error("Failed to approve shift: " + error.message, { id: toastId, style: TOAST_STYLES.ERROR });
         }
     };
 
     const handleRejectShift = async (id: string) => {
+        const toastId = toast.loading("Rejecting shift...", { style: TOAST_STYLES.PENDING });
+        setIsShiftModalOpen(false);
         try {
             await shiftService.rejectShift(id);
-            toast.info("Shift rejected");
-
-            // Remove from both lists
-            const filterList = (prev: Shift[]) => prev.filter(s => s.id !== id);
-
-            setShifts(filterList);
-            setMyShifts(filterList);
-            setIsShiftModalOpen(false);
+            toast.success("Shift rejected", { id: toastId, style: TOAST_STYLES.SUCCESS });
+            refreshData();
         } catch (error: any) {
-            toast.error("Failed to reject shift: " + error.message);
+            toast.error("Failed to reject shift: " + error.message, { id: toastId, style: TOAST_STYLES.ERROR });
         }
     };
 
@@ -234,6 +230,7 @@ const ShiftSyncShell: React.FC = () => {
     };
 
     const handleShiftMove = async (shiftId: string, newStart: Date, newEnd: Date) => {
+        const toastId = toast.loading("Moving shift...", { style: TOAST_STYLES.PENDING });
         try {
             const shift = shifts.find(s => s.id === shiftId);
             const actualShiftId = shift?.shiftId || shiftId;
@@ -242,14 +239,15 @@ const ShiftSyncShell: React.FC = () => {
                 start_time: newStart.toISOString(),
                 end_time: newEnd.toISOString()
             });
-            toast.success('Shift moved');
+            toast.success('Shift moved', { id: toastId, style: TOAST_STYLES.SUCCESS });
             refreshData();
         } catch (error: any) {
-            toast.error("Failed to move shift: " + error.message);
+            toast.error("Failed to move shift: " + error.message, { id: toastId, style: TOAST_STYLES.ERROR });
         }
     };
 
     const handleAssignEmployee = async (shiftId: string, employeeId: string) => {
+        const toastId = toast.loading("Assigning employee...", { style: TOAST_STYLES.PENDING });
         try {
             const shift = shifts.find(s => s.id === shiftId);
             const actualShiftId = shift?.shiftId || shiftId;
@@ -257,10 +255,10 @@ const ShiftSyncShell: React.FC = () => {
             await shiftService.updateShift(actualShiftId, {
                 assigned_user_id: employeeId === "open" ? null : employeeId
             });
-            toast.success('Employee assigned');
+            toast.success('Employee assigned', { id: toastId, style: TOAST_STYLES.SUCCESS });
             refreshData();
         } catch (error: any) {
-            toast.error("Failed to assign employee: " + error.message);
+            toast.error("Failed to assign employee: " + error.message, { id: toastId, style: TOAST_STYLES.ERROR });
         }
     };
 
@@ -270,6 +268,8 @@ const ShiftSyncShell: React.FC = () => {
 
     const handleSaveShift = async (data: Partial<Shift> | Partial<Shift>[]) => {
         const itemsToSave = Array.isArray(data) ? data : [data];
+        const toastId = toast.loading(itemsToSave.length > 1 ? "Saving shifts..." : "Saving shift...", { style: TOAST_STYLES.PENDING });
+        setIsShiftModalOpen(false);
 
         try {
             for (const item of itemsToSave) {
@@ -295,28 +295,25 @@ const ShiftSyncShell: React.FC = () => {
                 }
             }
 
-            if (itemsToSave.length > 0) {
-                toast.success(itemsToSave.length > 1 ? 'Shifts saved' : (itemsToSave[0].id ? 'Shift updated' : 'Shift created'));
-            }
-
+            toast.success(itemsToSave.length > 1 ? 'Shifts saved' : (itemsToSave[0].id ? 'Shift updated' : 'Shift created'), { id: toastId, style: TOAST_STYLES.SUCCESS });
             refreshData();
-            setIsShiftModalOpen(false);
         } catch (error: any) {
-            toast.error("Failed to save shift: " + error.message);
+            toast.error("Failed to save shift: " + error.message, { id: toastId, style: TOAST_STYLES.ERROR });
         }
     };
 
     const handleDeleteShift = async (id: string) => {
+        const toastId = toast.loading("Deleting shift...", { style: TOAST_STYLES.PENDING });
+        setIsShiftModalOpen(false);
         try {
             const shift = shifts.find(s => s.id === id);
             const actualShiftId = shift?.shiftId || id;
 
             await shiftService.deleteShift(actualShiftId);
-            toast.success('Shift deleted');
+            toast.success('Shift deleted', { id: toastId, style: TOAST_STYLES.SUCCESS });
             refreshData();
-            setIsShiftModalOpen(false);
         } catch (error: any) {
-            toast.error("Failed to delete shift: " + error.message);
+            toast.error("Failed to delete shift: " + error.message, { id: toastId, style: TOAST_STYLES.ERROR });
         }
     };
 
@@ -332,6 +329,8 @@ const ShiftSyncShell: React.FC = () => {
     };
 
     const handleSaveMember = async (memberData: Partial<Employee>) => {
+        const toastId = toast.loading(memberData.id ? "Updating member..." : "Adding member...", { style: TOAST_STYLES.PENDING });
+        setIsMemberModalOpen(false);
         try {
             if (memberData.id) {
                 await userService.updateUser(memberData.id, {
@@ -339,7 +338,7 @@ const ShiftSyncShell: React.FC = () => {
                     phone_number: memberData.phone,
                     isd_code: memberData.isd_code
                 });
-                toast.success('Member updated');
+                toast.success('Member updated', { id: toastId, style: TOAST_STYLES.SUCCESS });
             } else {
                 await userService.createUser({
                     email: memberData.email!,
@@ -348,23 +347,23 @@ const ShiftSyncShell: React.FC = () => {
                     role: (memberData.role as 'admin' | 'member') || 'member',
                     isd_code: memberData.isd_code
                 });
-                toast.success('Member added');
+                toast.success('Member added', { id: toastId, style: TOAST_STYLES.SUCCESS });
             }
             refreshData();
-            setIsMemberModalOpen(false);
         } catch (error: any) {
-            toast.error("Failed to save member: " + error.message);
+            toast.error("Failed to save member: " + error.message, { id: toastId, style: TOAST_STYLES.ERROR });
         }
     };
 
     const handleDeleteMember = async (id: string) => {
+        const toastId = toast.loading("Removing member...", { style: TOAST_STYLES.PENDING });
+        setIsMemberModalOpen(false);
         try {
             await userService.deleteUser(id);
-            toast.success('Member removed');
+            toast.success('Member removed', { id: toastId, style: TOAST_STYLES.SUCCESS });
             refreshData();
-            setIsMemberModalOpen(false);
         } catch (error: any) {
-            toast.error("Failed to delete member: " + error.message);
+            toast.error("Failed to delete member: " + error.message, { id: toastId, style: TOAST_STYLES.ERROR });
         }
     };
 
@@ -430,7 +429,7 @@ const ShiftSyncShell: React.FC = () => {
 
     return (
         <div className="flex flex-col h-screen bg-slate-50/50">
-            <Toaster position="bottom-center" />
+            <Toaster position="bottom-center" richColors />
 
             {/* Top Navigation */}
             <header className="h-16 glass sticky top-0 z-50 px-6 flex items-center justify-between shadow-sm transition-all">
@@ -554,7 +553,7 @@ const ShiftSyncShell: React.FC = () => {
                             <DropdownMenuItem
                                 onClick={() => {
                                     authService.logout();
-                                    window.location.href = '/login';
+                                    window.location.href = '/view';
                                 }}
                                 className="text-red-600 focus:text-red-600"
                             >

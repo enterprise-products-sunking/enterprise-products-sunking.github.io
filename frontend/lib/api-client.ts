@@ -52,8 +52,8 @@ export async function apiRequest<T>(
             localStorage.removeItem("refresh_token");
             localStorage.removeItem("user_role");
 
-            // Redirect to login page
-            window.location.href = "/login";
+            // Redirect to view page
+            window.location.href = "/view";
         }
 
         throw new Error(result.message || response.statusText);
