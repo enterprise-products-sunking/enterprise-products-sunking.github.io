@@ -154,6 +154,7 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts, marketplac
     // Sync marketplace
     useEffect(() => {
         if (marketplaceShifts && marketplaceShifts.length > 0) {
+            const { parseUTCToLocal } = require('@/lib/timezone');
             const mapped: MarketplaceShift[] = marketplaceShifts.map(swap => {
                 const os = swap.offered_shift_assignment?.shift;
                 const user = swap.requesting_user;
@@ -161,10 +162,10 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts, marketplac
                 return {
                     id: swap.id,
                     title: os?.title || 'Shift Exchange Request',
-                    date: os?.start_time ? parseISO(os.start_time) : new Date(),
-                    dateDisplay: os?.start_time ? format(parseISO(os.start_time), 'EEE, MMM d') : 'Date TBD',
-                    startTime: os?.start_time ? format(parseISO(os.start_time), 'HH:mm') : '00:00',
-                    endTime: os?.end_time ? format(parseISO(os.end_time), 'HH:mm') : '00:00',
+                    date: os?.start_time ? parseUTCToLocal(os.start_time) : new Date(),
+                    dateDisplay: os?.start_time ? format(parseUTCToLocal(os.start_time), 'EEE, MMM d') : 'Date TBD',
+                    startTime: os?.start_time ? format(parseUTCToLocal(os.start_time), 'HH:mm') : '00:00',
+                    endTime: os?.end_time ? format(parseUTCToLocal(os.end_time), 'HH:mm') : '00:00',
                     location: 'Main Office',
                     ownerName: user?.full_name || 'Staff Member',
                     ownerAvatar: user?.avatar,

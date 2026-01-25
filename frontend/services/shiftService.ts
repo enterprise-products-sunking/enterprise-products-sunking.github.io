@@ -1,6 +1,6 @@
 import { apiRequest } from "@/lib/api-client";
 import { Shift, ShiftStatus } from "@/types";
-import { parseISO } from "date-fns";
+import { parseUTCToLocal } from "@/lib/timezone";
 
 export interface ShiftResponse {
     id: string;
@@ -43,8 +43,8 @@ const mapAssignmentToShift = (assignment: AssignmentResponse): Shift => {
             name: assignment.user.full_name,
             email: assignment.user.email
         } : undefined,
-        start: parseISO(assignment.shift.start_time),
-        end: parseISO(assignment.shift.end_time),
+        start: parseUTCToLocal(assignment.shift.start_time),
+        end: parseUTCToLocal(assignment.shift.end_time),
         role: assignment.shift.title,
         status: status,
         rawStatus: assignment.status,
@@ -55,12 +55,20 @@ const mapAssignmentToShift = (assignment: AssignmentResponse): Shift => {
 export const shiftService = {
     listAllShifts: async (): Promise<Shift[]> => {
         const response = await apiRequest<AssignmentResponse[]>("/shifts");
-        return (response.data || []).map(mapAssignmentToShift);
+        // Filter out rejected assignments
+        const activeAssignments = (response.data || []).filter(
+            assignment => assignment.status !== "rejected"
+        );
+        return activeAssignments.map(mapAssignmentToShift);
     },
 
     listMyShifts: async (): Promise<Shift[]> => {
         const response = await apiRequest<AssignmentResponse[]>("/my-shifts");
-        return (response.data || []).map(mapAssignmentToShift);
+        // Filter out rejected assignments
+        const activeAssignments = (response.data || []).filter(
+            assignment => assignment.status !== "rejected"
+        );
+        return activeAssignments.map(mapAssignmentToShift);
     },
 
     approveShift: async (shiftId: string) => {

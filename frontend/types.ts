@@ -30,6 +30,7 @@ export interface Employee {
     maxHours: number;
     email: string;
     phone: string;
+    isd_code?: string;
 }
 
 export interface Shift {

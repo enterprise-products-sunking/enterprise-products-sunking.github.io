@@ -44,6 +44,18 @@ export async function apiRequest<T>(
 
     if (!response.ok) {
         console.error(`[API Error] ${endpoint} | Status: ${response.status} | Message: ${result.message}`);
+
+        // Handle token expiration or invalid authentication
+        if (response.status === 401 && isClient) {
+            console.warn("[Auth] Token expired or invalid. Logging out...");
+            localStorage.removeItem("access_token");
+            localStorage.removeItem("refresh_token");
+            localStorage.removeItem("user_role");
+
+            // Redirect to login page
+            window.location.href = "/login";
+        }
+
         throw new Error(result.message || response.statusText);
     }
 

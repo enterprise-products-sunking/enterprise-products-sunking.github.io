@@ -11,15 +11,17 @@ interface MembersViewProps {
     employees: Employee[];
     onAddMember: () => void;
     onEditMember: (employee: Employee) => void;
+    onDeleteMember?: (employee: Employee) => void;
 }
 
-const MembersView: React.FC<MembersViewProps> = ({ employees, onAddMember, onEditMember }) => {
+const MembersView: React.FC<MembersViewProps> = ({ employees, onAddMember, onEditMember, onDeleteMember }) => {
     // Column definitions with handlers
     const columns = getColumns({
         onEdit: onEditMember,
         onDelete: (employee) => {
-            console.log('Delete employee:', employee.id);
-            // In a real app, this would trigger a delete confirmation/action
+            if (onDeleteMember) {
+                onDeleteMember(employee);
+            }
         }
     });
 
