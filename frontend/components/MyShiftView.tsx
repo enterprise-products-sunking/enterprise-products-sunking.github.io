@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
     Calendar as CalendarIcon,
     Clock,
@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Shift, Employee } from '../types';
+import { Shift, Employee, ShiftStatus } from '../types';
 import { toast } from 'sonner';
 import {
     Popover,
@@ -72,6 +72,8 @@ interface MarketplaceShift {
 interface MyShiftViewProps {
     employees: Employee[];
     shifts: Shift[];
+    marketplaceShifts?: any[];
+    onRefresh?: () => void;
 }
 
 // Get shift time status
@@ -98,7 +100,7 @@ const getDateBadgeStyle = (status: TimeStatus) => {
     }
 };
 
-const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts }) => {
+const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts, marketplaceShifts, onRefresh }) => {
     // Modal states
     const [isExchangeModalOpen, setIsExchangeModalOpen] = useState(false);
     const [isMarketplaceExchangeOpen, setIsMarketplaceExchangeOpen] = useState(false);
@@ -117,23 +119,64 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts }) => {
         to: addDays(startOfWeek(new Date(), { weekStartsOn: 1 }), 6),
     });
 
-    // Mock data for my shifts
-    const [myShifts, setMyShifts] = useState<MyShift[]>([
-        { id: '1', title: 'Morning Shift - Front Desk', date: new Date(2026, 0, 27), startTime: '09:00', endTime: '17:00', location: 'Main Office, Floor 1', status: 'scheduled' },
-        { id: '2', title: 'Evening Shift - Customer Support', date: new Date(2026, 0, 28), startTime: '14:00', endTime: '22:00', location: 'Support Center', status: 'pending_switch', pendingExchangeWith: 'm1' },
-        { id: '3', title: 'Night Shift - Security', date: new Date(2026, 0, 22), startTime: '22:00', endTime: '06:00', location: 'Building B', status: 'scheduled' },
-        { id: '4', title: 'Day Shift - Reception', date: new Date(), startTime: '08:00', endTime: '16:00', location: 'Main Lobby', status: 'scheduled' },
-        { id: '5', title: 'Afternoon Shift - Support', date: new Date(2026, 0, 30), startTime: '12:00', endTime: '20:00', location: 'Support Center', status: 'scheduled' },
-        // Shifts pending confirmation (approval)
-        { id: '6', title: 'Special Event Coverage', date: new Date(2026, 1, 5), startTime: '18:00', endTime: '23:00', location: 'Event Hall', status: 'pending_confirmation' },
-        { id: '7', title: 'Weekend Rotating Shift', date: new Date(2026, 1, 6), startTime: '09:00', endTime: '14:00', location: 'Front Desk', status: 'pending_confirmation' },
-    ]);
+    // Data for my shifts
+    const [myShifts, setMyShifts] = useState<MyShift[]>([]);
+    const [marketShifts, setMarketShifts] = useState<MarketplaceShift[]>([]);
 
-    // Mock marketplace shifts (these are shifts other users want to exchange)
-    const [marketShifts, setMarketShifts] = useState<MarketplaceShift[]>([
-        { id: 'm1', title: 'Weekend Shift - Reception', date: new Date(2026, 0, 25), dateDisplay: 'Sat, Jan 25', startTime: '10:00', endTime: '18:00', location: 'Main Lobby', ownerName: 'Sarah Chen', offeredShiftTitle: 'Looking to swap for any weekday shift' },
-        { id: 'm2', title: 'Holiday Coverage', date: new Date(2026, 0, 29), dateDisplay: 'Wed, Jan 29', startTime: '08:00', endTime: '16:00', location: 'Branch Office', ownerName: 'Marcus Johnson', offeredShiftTitle: 'Will exchange for evening shift' },
-    ]);
+    // Sync props to state
+    useEffect(() => {
+        if (shifts && shifts.length > 0) {
+            const mappedShifts: MyShift[] = shifts.map(s => {
+                let displayStatus: MyShift['status'] = 'scheduled';
+
+                if (s.status === ShiftStatus.PendingConfirmation || s.status === ShiftStatus.Pending) {
+                    displayStatus = 'pending_confirmation';
+                } else if (s.status === ShiftStatus.Confirmed) {
+                    displayStatus = 'scheduled';
+                }
+
+                return {
+                    id: s.id,
+                    title: s.role,
+                    date: s.start,
+                    startTime: format(s.start, 'HH:mm'),
+                    endTime: format(s.end, 'HH:mm'),
+                    location: 'Main Office',
+                    status: displayStatus
+                };
+            });
+            setMyShifts(mappedShifts);
+        } else {
+            setMyShifts([]);
+        }
+    }, [shifts]);
+
+    // Sync marketplace
+    useEffect(() => {
+        if (marketplaceShifts && marketplaceShifts.length > 0) {
+            const { parseUTCToLocal } = require('@/lib/timezone');
+            const mapped: MarketplaceShift[] = marketplaceShifts.map(swap => {
+                const os = swap.offered_shift_assignment?.shift;
+                const user = swap.requesting_user;
+
+                return {
+                    id: swap.id,
+                    title: os?.title || 'Shift Exchange Request',
+                    date: os?.start_time ? parseUTCToLocal(os.start_time) : new Date(),
+                    dateDisplay: os?.start_time ? format(parseUTCToLocal(os.start_time), 'EEE, MMM d') : 'Date TBD',
+                    startTime: os?.start_time ? format(parseUTCToLocal(os.start_time), 'HH:mm') : '00:00',
+                    endTime: os?.end_time ? format(parseUTCToLocal(os.end_time), 'HH:mm') : '00:00',
+                    location: 'Main Office',
+                    ownerName: user?.full_name || 'Staff Member',
+                    ownerAvatar: user?.avatar,
+                    offeredShiftTitle: swap.note || 'Looking for an exchange'
+                };
+            });
+            setMarketShifts(mapped);
+        } else {
+            setMarketShifts([]);
+        }
+    }, [marketplaceShifts]);
 
     // Get eligible shifts for exchange (upcoming, not pending)
     const eligibleShiftsForExchange = useMemo(() => {
@@ -174,15 +217,14 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts }) => {
         return { totalShifts, totalHours };
     }, [filteredShiftsInRange]);
 
-    const upcomingCount = myShifts.filter(s => getShiftTimeStatus(s.date) === 'upcoming' && s.status !== 'pending_confirmation').length;
+    const upcomingCount = myShifts.filter(s => getShiftTimeStatus(s.date) === 'upcoming').length;
     const currentCount = myShifts.filter(s => getShiftTimeStatus(s.date) === 'current').length;
     const pendingCount = myShifts.filter(s => s.status === 'pending_switch').length;
     const confirmationCount = myShifts.filter(s => s.status === 'pending_confirmation').length;
 
-    // Sorted shifts (exclude pending_confirmation for normal view)
+    // Sorted shifts (include pending_confirmation for visibility)
     const sortedShifts = useMemo(() => {
         return [...myShifts]
-            .filter(s => s.status !== 'pending_confirmation')
             .sort((a, b) => {
                 const statusOrder = { current: 0, upcoming: 1, past: 2 };
                 const aStatus = getShiftTimeStatus(a.date);
@@ -209,21 +251,30 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts }) => {
         setIsApprovalModalOpen(true);
     };
 
-    const confirmApproveShift = () => {
+    const confirmApproveShift = async () => {
         if (!shiftToApprove) return;
 
-        setMyShifts(prev => prev.map(s =>
-            s.id === shiftToApprove.id
-                ? { ...s, status: 'scheduled' as const }
-                : s
-        ));
+        try {
+            const { shiftService } = await import('@/services/shiftService');
+            await shiftService.approveShift(shiftToApprove.id);
 
-        toast.success("Shift Confirmed", {
-            description: "Added to your schedule and synced to Google Calendar."
-        });
+            setMyShifts(prev => prev.map(s =>
+                s.id === shiftToApprove.id
+                    ? { ...s, status: 'scheduled' as const }
+                    : s
+            ));
 
-        setIsApprovalModalOpen(false);
-        setShiftToApprove(null);
+            toast.success("Shift Confirmed", {
+                description: "Added to your schedule and synced to Google Calendar."
+            });
+        } catch (error: any) {
+            toast.error("Failed to approve shift", {
+                description: error.message
+            });
+        } finally {
+            setIsApprovalModalOpen(false);
+            setShiftToApprove(null);
+        }
     };
 
     // Filter shifts for selected date (Approval)
@@ -237,11 +288,20 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts }) => {
 
     // === Restored Exchange & Reject Handlers ===
 
-    const handleRejectShift = (shiftId: string) => {
-        setMyShifts(prev => prev.filter(s => s.id !== shiftId));
-        toast.info("Shift Rejected", {
-            description: "The shift has been removed from your list."
-        });
+    const handleRejectShift = async (shiftId: string) => {
+        try {
+            const { shiftService } = await import('@/services/shiftService');
+            await shiftService.rejectShift(shiftId);
+
+            setMyShifts(prev => prev.filter(s => s.id !== shiftId));
+            toast.info("Shift Rejected", {
+                description: "The shift has been removed from your list."
+            });
+        } catch (error: any) {
+            toast.error("Failed to reject shift", {
+                description: error.message
+            });
+        }
     };
 
     // Start exchange from My Schedule (user wants to swap their shift)
@@ -263,54 +323,42 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts }) => {
     };
 
     // Confirm exchange request (from My Schedule)
-    const confirmExchangeRequest = () => {
+    const confirmExchangeRequest = async () => {
         if (!selectedShift) return;
 
-        // Update shift status to pending
-        setMyShifts(prev => prev.map(s =>
-            s.id === selectedShift.id
-                ? { ...s, status: 'pending_switch' as const }
-                : s
-        ));
+        try {
+            const { shiftService } = await import('@/services/shiftService');
+            await shiftService.createSwap({
+                offered_shift_assignment_id: selectedShift.id,
+                note: exchangeNote
+            });
 
-        // Add to marketplace
-        const newMarketShift: MarketplaceShift = {
-            id: `m-${Date.now()}`,
-            title: selectedShift.title,
-            date: selectedShift.date,
-            dateDisplay: format(selectedShift.date, 'EEE, MMM d'),
-            startTime: selectedShift.startTime,
-            endTime: selectedShift.endTime,
-            location: selectedShift.location,
-            ownerName: 'You',
-            offeredShiftTitle: exchangeNote || 'Looking for any compatible shift'
-        };
-        setMarketShifts(prev => [...prev, newMarketShift]);
-
-        setIsExchangeModalOpen(false);
-        toast.success('Shift posted to marketplace!', {
-            description: 'Other staff can now propose an exchange.'
-        });
+            toast.success('Shift posted to marketplace!', {
+                description: 'Other staff can now propose an exchange.'
+            });
+            setIsExchangeModalOpen(false);
+            onRefresh?.();
+        } catch (error: any) {
+            toast.error("Failed to post shift: " + error.message);
+        }
     };
 
     // Confirm marketplace exchange (user takes someone's shift)
-    const confirmMarketplaceExchange = () => {
+    const confirmMarketplaceExchange = async () => {
         if (!selectedMarketplaceShift || !shiftToOffer) return;
 
-        // Update the offered shift to pending
-        setMyShifts(prev => prev.map(s =>
-            s.id === shiftToOffer.id
-                ? { ...s, status: 'pending_switch' as const, pendingExchangeWith: selectedMarketplaceShift.id }
-                : s
-        ));
+        try {
+            const { shiftService } = await import('@/services/shiftService');
+            await shiftService.proposeSwap(selectedMarketplaceShift.id, shiftToOffer.id);
 
-        // Remove from marketplace
-        setMarketShifts(prev => prev.filter(s => s.id !== selectedMarketplaceShift.id));
-
-        setIsMarketplaceExchangeOpen(false);
-        toast.success('Exchange request sent!', {
-            description: `Waiting for ${selectedMarketplaceShift.ownerName} to confirm.`
-        });
+            toast.success('Exchange request sent!', {
+                description: `Waiting for ${selectedMarketplaceShift.ownerName} to confirm.`
+            });
+            setIsMarketplaceExchangeOpen(false);
+            onRefresh?.();
+        } catch (error: any) {
+            toast.error("Failed to propose exchange: " + error.message);
+        }
     };
 
     const resetExchangeModal = () => {
@@ -454,6 +502,7 @@ const MyShiftView: React.FC<MyShiftViewProps> = ({ employees, shifts }) => {
                                     <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-3">Legend</p>
                                     <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-emerald-500"></div><span className="text-xs text-slate-600">Today's Shift</span></div>
                                     <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-amber-500"></div><span className="text-xs text-slate-600">Upcoming Shift</span></div>
+                                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-red-500"></div><span className="text-xs text-slate-600">Action Required</span></div>
                                     <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-slate-300"></div><span className="text-xs text-slate-600">Past Shift</span></div>
                                 </div>
                             </div>

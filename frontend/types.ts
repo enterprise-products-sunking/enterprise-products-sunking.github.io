@@ -14,6 +14,7 @@ export enum UserRole {
 export enum ShiftStatus {
     Confirmed = 'confirmed',
     Pending = 'pending',
+    PendingConfirmation = 'pending_confirmation',
     RequestedOff = 'requested_off',
     Open = 'open'
 }
@@ -29,15 +30,24 @@ export interface Employee {
     maxHours: number;
     email: string;
     phone: string;
+    isd_code?: string;
 }
 
 export interface Shift {
-    id: string;
+    id: string; // This is the unique identifier for UI (Assignment ID or temporary ID)
+    shiftId?: string; // The ID of the actual shift in the backend
+    assignmentId?: string;
     employeeId: string | null; // null for open shifts
+    assignedUser?: {
+        id: string;
+        name: string;
+        email: string;
+    };
     start: Date;
     end: Date;
     role: string;
     status: ShiftStatus;
+    rawStatus?: string;
     notes?: string;
     isDragging?: boolean;
 }

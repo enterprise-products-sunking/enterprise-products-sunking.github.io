@@ -71,20 +71,9 @@ export const getColumns = ({ onEdit, onDelete }: MemberColumnsProps): ColumnDef<
         cell: ({ row }) => {
             const employee = row.original
             return (
-                <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2 text-sm font-medium text-slate-800">
-                        <Briefcase className="w-4 h-4 text-slate-400" />
-                        {employee.role}
-                    </div>
-                    <div className="flex gap-2">
-                        <Badge variant="secondary" className="w-fit font-normal text-xs text-slate-600 bg-slate-100 border border-slate-200">
-                            {employee.department}
-                        </Badge>
-                        <Badge variant="outline" className="w-fit font-normal text-xs text-slate-500 border-slate-200 flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {employee.maxHours}h
-                        </Badge>
-                    </div>
+                <div className="flex items-center gap-2 text-sm font-medium text-slate-800">
+                    <Briefcase className="w-4 h-4 text-slate-400" />
+                    {employee.role}
                 </div>
             )
         },

@@ -16,7 +16,14 @@ export function LoginForm({
 }: React.ComponentProps<"div">) {
     const [email, setEmail] = useState("")
     const [isLoading, setIsLoading] = useState(false)
+    const [mounted, setMounted] = useState(false)
     const router = useRouter()
+
+    React.useEffect(() => {
+        setMounted(true)
+    }, [])
+
+    if (!mounted) return null;
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -26,12 +33,16 @@ export function LoginForm({
         }
 
         setIsLoading(true)
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1500))
-
-        setIsLoading(false)
-        router.push(`/otp?email=${encodeURIComponent(email)}`)
-        toast.success("OTP sent to your email")
+        try {
+            const { authService } = await import("@/services/authService")
+            await authService.login(email)
+            toast.success("OTP sent to your email")
+            router.push(`/otp?email=${encodeURIComponent(email)}`)
+        } catch (error: any) {
+            toast.error(error.message || "Failed to send OTP")
+        } finally {
+            setIsLoading(false)
+        }
     }
 
     return (
@@ -70,6 +81,7 @@ export function LoginForm({
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
                                 disabled={isLoading}
+                                suppressHydrationWarning
                                 className="h-12 bg-slate-50 border-slate-200 focus:bg-white transition-all"
                             />
                         </div>

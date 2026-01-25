@@ -128,7 +128,7 @@ const MonthView: React.FC<MonthViewProps> = ({
                                                 fallbackColor
                                             )}
                                         >
-                                            <span className="font-semibold">{format(shift.start, 'HH:mm')}</span> {emp ? emp.name.split(' ')[0] : 'Open'}
+                                            <span className="font-semibold">{format(shift.start, 'HH:mm')}</span> {emp?.name.split(' ')[0] || shift.assignedUser?.name.split(' ')[0] || 'Open'}
                                         </div>
                                     );
                                 })}

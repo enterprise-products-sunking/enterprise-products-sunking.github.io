@@ -23,11 +23,18 @@ import { toast } from "sonner"
 export function OTPForm({ className, ...props }: React.ComponentProps<"div">) {
     const [otp, setOtp] = useState("")
     const [isLoading, setIsLoading] = useState(false)
+    const [mounted, setMounted] = useState(false)
     const router = useRouter()
     const searchParams = useSearchParams()
     const email = searchParams.get("email") || "your email"
 
-    const handleVerify = (e: React.FormEvent) => {
+    React.useEffect(() => {
+        setMounted(true)
+    }, [])
+
+    if (!mounted) return null;
+
+    const handleVerify = async (e: React.FormEvent) => {
         e.preventDefault()
         if (otp.length < 6) {
             toast.error("Please enter the 6-digit code")
@@ -35,11 +42,40 @@ export function OTPForm({ className, ...props }: React.ComponentProps<"div">) {
         }
 
         setIsLoading(true)
-        setTimeout(() => {
-            setIsLoading(false)
+        try {
+            const { authService } = await import("@/services/authService")
+            const response = await authService.verifyOtp(email === "your email" ? "" : email, otp)
+
+            // Store tokens
+            if (response.data) {
+                localStorage.setItem("access_token", response.data.access_token)
+                localStorage.setItem("refresh_token", response.data.refresh_token)
+                localStorage.setItem("user_role", response.data.role)
+            }
+
             toast.success("Identity verified!")
             router.push("/")
-        }, 1000)
+        } catch (error: any) {
+            toast.error(error.message || "Invalid or expired code")
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    const handleResend = async (e: React.MouseEvent) => {
+        e.preventDefault()
+        if (email === "your email") return
+
+        setIsLoading(true)
+        try {
+            const { authService } = await import("@/services/authService")
+            await authService.resendOtp(email)
+            toast.success("A new code has been sent")
+        } catch (error: any) {
+            toast.error(error.message || "Failed to resend code")
+        } finally {
+            setIsLoading(false)
+        }
     }
 
     return (
@@ -84,7 +120,7 @@ export function OTPForm({ className, ...props }: React.ComponentProps<"div">) {
                                 </InputOTPGroup>
                             </InputOTP>
                             <FieldDescription className="text-center">
-                                Didn&apos;t receive the code? <a href="#" className="text-blue-600 hover:underline">Resend</a>
+                                Didn&apos;t receive the code? <button type="button" onClick={handleResend} className="text-blue-600 hover:underline" disabled={isLoading}>Resend</button>
                             </FieldDescription>
                         </div>
                     </Field>

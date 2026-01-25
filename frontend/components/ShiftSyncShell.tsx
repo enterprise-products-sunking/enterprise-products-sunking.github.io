@@ -9,7 +9,10 @@ import {
     Share2,
     Plus,
     UserCircle,
-    Users
+    Users,
+    LogOut,
+    Settings,
+    RotateCw
 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -21,6 +24,7 @@ import ShiftModal from './ShiftModal';
 import MembersView from './MembersView';
 import MemberModal from './MemberModal';
 import MyShiftView from './MyShiftView';
+import ProfileEditModal from './ProfileEditModal';
 
 import { getInitialShifts, EMPLOYEES } from '../constants';
 import { Shift, Employee, ViewMode, UserRole, ShiftStatus } from '../types';
@@ -29,22 +33,59 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Briefcase } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { shiftService } from '@/services/shiftService';
+import { userService } from '@/services/userService';
+import { authService } from '@/services/authService';
+import { getTimezoneAbbreviation } from '@/lib/timezone';
+
+const TOAST_STYLES = {
+    PENDING: { background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1864ab' },
+    SUCCESS: { background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534' },
+    ERROR: { background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b' }
+};
 
 const ShiftSyncShell: React.FC = () => {
     // 1. All Hooks declarations must be at the top level
     const [mounted, setMounted] = useState(false);
+    const [userTimezone, setUserTimezone] = useState<string>('');
 
     // Data State
     const [shifts, setShifts] = useState<Shift[]>([]);
-    const [employees, setEmployees] = useState<Employee[]>(EMPLOYEES);
+    const [myShifts, setMyShifts] = useState<Shift[]>([]);
+    const [marketplaceShifts, setMarketplaceShifts] = useState<any[]>([]);
+    const [employees, setEmployees] = useState<Employee[]>([]);
+    const [currentUser, setCurrentUser] = useState<Employee | null>(null);
+    const [isLoadingData, setIsLoadingData] = useState(true);
 
     // View State
     const [currentDate, setCurrentDate] = useState<Date>(new Date());
-    const [userRole, setUserRole] = useState<UserRole>(UserRole.Admin);
+    const [userRole, setUserRole] = useState<UserRole | null>(null);
     const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.Week);
 
     // Navigation State
     const [activeTab, setActiveTab] = useState<'calendar' | 'members' | 'my_shift'>('calendar');
+
+    // Effect for activeTab persistence
+    useEffect(() => {
+        const savedTab = localStorage.getItem('activeTab') as 'calendar' | 'members' | 'my_shift';
+        if (savedTab && ['calendar', 'members', 'my_shift'].includes(savedTab)) {
+            setActiveTab(savedTab);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (mounted) {
+            localStorage.setItem('activeTab', activeTab);
+        }
+    }, [activeTab, mounted]);
 
     // Modal States
     const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
@@ -53,12 +94,82 @@ const ShiftSyncShell: React.FC = () => {
     const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
     const [selectedMember, setSelectedMember] = useState<Partial<Employee> | null>(null);
 
-    // Effect for hydration
+    const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
+    const refreshData = React.useCallback(async () => {
+        setIsLoadingData(true);
+        try {
+            // Fetch User Profile
+            try {
+                const profile = await userService.getMyProfile();
+                setCurrentUser(profile);
+            } catch (e) {
+                console.warn("Failed to fetch user profile", e);
+            }
+
+            const storedRole = localStorage.getItem("user_role");
+
+            // Prepare fetch promises with individual error handling
+            const globalShiftsPromise = shiftService.listAllShifts().catch(err => {
+                console.warn("Global shifts fetch skipped or restricted:", err.message);
+                return [];
+            });
+
+            const myShiftsPromise = shiftService.listMyShifts().catch(err => {
+                console.warn("Personal shifts fetch failed:", err.message);
+                return [];
+            });
+
+            const marketplacePromise = shiftService.listMarketplace().catch(err => {
+                console.warn("Marketplace fetch failed:", err.message);
+                return [];
+            });
+
+            const employeesPromise = (storedRole === 'admin')
+                ? userService.listUsers().catch(() => EMPLOYEES)
+                : Promise.resolve(EMPLOYEES);
+
+            // Execute all in parallel
+            const [allResults, myResults, marketResults, empResults] = await Promise.all([
+                globalShiftsPromise,
+                myShiftsPromise,
+                marketplacePromise,
+                employeesPromise
+            ]);
+
+            // Update state
+            setShifts(allResults.length > 0 ? allResults : getInitialShifts());
+            setMyShifts(myResults);
+            setMarketplaceShifts(marketResults);
+            setEmployees(empResults);
+        } catch (error: any) {
+            console.error("Critical error in fetchData:", error);
+            setShifts(getInitialShifts());
+            setEmployees(EMPLOYEES);
+            toast.error("Demonstration mode: Limited permissions or backend offline.");
+        } finally {
+            setIsLoadingData(false);
+        }
+    }, []);
+
+    // Effect for hydration and loading data
     useEffect(() => {
         setMounted(true);
-        setShifts(getInitialShifts());
         setCurrentDate(new Date());
-    }, []);
+        setUserTimezone(getTimezoneAbbreviation());
+
+        // Load role from localStorage
+        const storedRole = localStorage.getItem("user_role");
+        if (storedRole === 'admin') {
+            setUserRole(UserRole.Admin);
+        } else if (storedRole === 'member') {
+            setUserRole(UserRole.Employee);
+        } else {
+            setUserRole(UserRole.Employee); // Default to employee/member
+        }
+
+        refreshData();
+    }, [refreshData]);
 
     // 2. Early return AFTER all hooks
     if (!mounted) return null;
@@ -82,6 +193,30 @@ const ShiftSyncShell: React.FC = () => {
         setIsShiftModalOpen(true);
     };
 
+    const handleApproveShift = async (id: string) => {
+        const toastId = toast.loading("Approving shift...", { style: TOAST_STYLES.PENDING });
+        setIsShiftModalOpen(false);
+        try {
+            await shiftService.approveShift(id);
+            toast.success("Shift approved successfully", { id: toastId, style: TOAST_STYLES.SUCCESS });
+            refreshData();
+        } catch (error: any) {
+            toast.error("Failed to approve shift: " + error.message, { id: toastId, style: TOAST_STYLES.ERROR });
+        }
+    };
+
+    const handleRejectShift = async (id: string) => {
+        const toastId = toast.loading("Rejecting shift...", { style: TOAST_STYLES.PENDING });
+        setIsShiftModalOpen(false);
+        try {
+            await shiftService.rejectShift(id);
+            toast.success("Shift rejected", { id: toastId, style: TOAST_STYLES.SUCCESS });
+            refreshData();
+        } catch (error: any) {
+            toast.error("Failed to reject shift: " + error.message, { id: toastId, style: TOAST_STYLES.ERROR });
+        }
+    };
+
     const handleShiftCreate = (start: Date, end?: Date, employeeId?: string) => {
         const endTime = end || new Date(start.getTime() + 8 * 60 * 60 * 1000);
         setSelectedShift({
@@ -94,64 +229,92 @@ const ShiftSyncShell: React.FC = () => {
         setIsShiftModalOpen(true);
     };
 
-    const handleShiftMove = (shiftId: string, newStart: Date, newEnd: Date) => {
-        setShifts(prev => prev.map(s =>
-            s.id === shiftId ? { ...s, start: newStart, end: newEnd } : s
-        ));
-        toast.success('Shift moved');
+    const handleShiftMove = async (shiftId: string, newStart: Date, newEnd: Date) => {
+        const toastId = toast.loading("Moving shift...", { style: TOAST_STYLES.PENDING });
+        try {
+            const shift = shifts.find(s => s.id === shiftId);
+            const actualShiftId = shift?.shiftId || shiftId;
+
+            await shiftService.updateShift(actualShiftId, {
+                start_time: newStart.toISOString(),
+                end_time: newEnd.toISOString()
+            });
+            toast.success('Shift moved', { id: toastId, style: TOAST_STYLES.SUCCESS });
+            refreshData();
+        } catch (error: any) {
+            toast.error("Failed to move shift: " + error.message, { id: toastId, style: TOAST_STYLES.ERROR });
+        }
     };
 
-    const handleAssignEmployee = (shiftId: string, employeeId: string) => {
-        setShifts(prev => prev.map(s =>
-            s.id === shiftId ? { ...s, employeeId } : s
-        ));
-        toast.success('Assigned employee to shift');
+    const handleAssignEmployee = async (shiftId: string, employeeId: string) => {
+        const toastId = toast.loading("Assigning employee...", { style: TOAST_STYLES.PENDING });
+        try {
+            const shift = shifts.find(s => s.id === shiftId);
+            const actualShiftId = shift?.shiftId || shiftId;
+
+            await shiftService.updateShift(actualShiftId, {
+                assigned_user_id: employeeId === "open" ? null : employeeId
+            });
+            toast.success('Employee assigned', { id: toastId, style: TOAST_STYLES.SUCCESS });
+            refreshData();
+        } catch (error: any) {
+            toast.error("Failed to assign employee: " + error.message, { id: toastId, style: TOAST_STYLES.ERROR });
+        }
     };
 
     const handleAddEmployeeToSlot = (start: Date, employeeId: string) => {
         handleShiftCreate(start, undefined, employeeId);
     };
 
-    const handleSaveShift = (data: Partial<Shift> | Partial<Shift>[]) => {
+    const handleSaveShift = async (data: Partial<Shift> | Partial<Shift>[]) => {
         const itemsToSave = Array.isArray(data) ? data : [data];
-
-        // Check if any item is an update (has ID)
-        const updates = itemsToSave.filter(s => s.id);
-        const creates = itemsToSave.filter(s => !s.id);
-
-        setShifts(prev => {
-            let nextShifts = [...prev];
-
-            // Handle Updates
-            updates.forEach(update => {
-                nextShifts = nextShifts.map(s => s.id === update.id ? { ...s, ...update } as Shift : s);
-            });
-
-            // Handle Creates
-            creates.forEach((create, idx) => {
-                const newShift: Shift = {
-                    ...create,
-                    id: `new-${Date.now()}-${idx}`,
-                    status: create.status || ShiftStatus.Pending,
-                    employeeId: create.employeeId || null,
-                } as Shift;
-                nextShifts.push(newShift);
-            });
-
-            return nextShifts;
-        });
-
-        if (updates.length > 0 && creates.length === 0) toast.success('Shift updated');
-        else if (creates.length > 0 && updates.length === 0) toast.success(`${creates.length} shift(s) created`);
-        else toast.success('Shifts saved');
-
+        const toastId = toast.loading(itemsToSave.length > 1 ? "Saving shifts..." : "Saving shift...", { style: TOAST_STYLES.PENDING });
         setIsShiftModalOpen(false);
+
+        try {
+            for (const item of itemsToSave) {
+                if (item.id) {
+                    // Update - use shiftId if available
+                    const actualShiftId = item.shiftId || item.id;
+                    await shiftService.updateShift(actualShiftId, {
+                        title: item.role,
+                        assigned_user_id: item.employeeId,
+                        start_time: item.start?.toISOString(),
+                        end_time: item.end?.toISOString(),
+                        notes: item.notes
+                    });
+                } else {
+                    // Create
+                    await shiftService.createShift({
+                        title: item.role || 'Staff',
+                        assigned_user_id: item.employeeId || null,
+                        start_time: item.start!.toISOString(),
+                        end_time: item.end!.toISOString(),
+                        notes: item.notes
+                    });
+                }
+            }
+
+            toast.success(itemsToSave.length > 1 ? 'Shifts saved' : (itemsToSave[0].id ? 'Shift updated' : 'Shift created'), { id: toastId, style: TOAST_STYLES.SUCCESS });
+            refreshData();
+        } catch (error: any) {
+            toast.error("Failed to save shift: " + error.message, { id: toastId, style: TOAST_STYLES.ERROR });
+        }
     };
 
-    const handleDeleteShift = (id: string) => {
-        setShifts(prev => prev.filter(s => s.id !== id));
+    const handleDeleteShift = async (id: string) => {
+        const toastId = toast.loading("Deleting shift...", { style: TOAST_STYLES.PENDING });
         setIsShiftModalOpen(false);
-        toast.success('Shift deleted');
+        try {
+            const shift = shifts.find(s => s.id === id);
+            const actualShiftId = shift?.shiftId || id;
+
+            await shiftService.deleteShift(actualShiftId);
+            toast.success('Shift deleted', { id: toastId, style: TOAST_STYLES.SUCCESS });
+            refreshData();
+        } catch (error: any) {
+            toast.error("Failed to delete shift: " + error.message, { id: toastId, style: TOAST_STYLES.ERROR });
+        }
     };
 
     // --- Member Handlers ---
@@ -165,30 +328,43 @@ const ShiftSyncShell: React.FC = () => {
         setIsMemberModalOpen(true);
     };
 
-    const handleSaveMember = (memberData: Partial<Employee>) => {
-        if (memberData.id) {
-            setEmployees(prev => prev.map(e => e.id === memberData.id ? { ...e, ...memberData } as Employee : e));
-            toast.success('Member updated');
-        } else {
-            const newMember: Employee = {
-                ...memberData,
-                id: `emp-${Date.now()}`,
-                avatar: '', // Default or placeholder
-                weeklyHours: 0,
-                maxHours: 40,
-            } as Employee;
-            setEmployees(prev => [...prev, newMember]);
-            toast.success('Member added');
-        }
+    const handleSaveMember = async (memberData: Partial<Employee>) => {
+        const toastId = toast.loading(memberData.id ? "Updating member..." : "Adding member...", { style: TOAST_STYLES.PENDING });
         setIsMemberModalOpen(false);
+        try {
+            if (memberData.id) {
+                await userService.updateUser(memberData.id, {
+                    full_name: memberData.name,
+                    phone_number: memberData.phone,
+                    isd_code: memberData.isd_code
+                });
+                toast.success('Member updated', { id: toastId, style: TOAST_STYLES.SUCCESS });
+            } else {
+                await userService.createUser({
+                    email: memberData.email!,
+                    phone_number: memberData.phone!,
+                    full_name: memberData.name,
+                    role: (memberData.role as 'admin' | 'member') || 'member',
+                    isd_code: memberData.isd_code
+                });
+                toast.success('Member added', { id: toastId, style: TOAST_STYLES.SUCCESS });
+            }
+            refreshData();
+        } catch (error: any) {
+            toast.error("Failed to save member: " + error.message, { id: toastId, style: TOAST_STYLES.ERROR });
+        }
     };
 
-    const handleDeleteMember = (id: string) => {
-        setEmployees(prev => prev.filter(e => e.id !== id));
-        // Also remove shifts for this employee
-        setShifts(prev => prev.map(s => s.employeeId === id ? { ...s, employeeId: null, status: ShiftStatus.Open } : s));
+    const handleDeleteMember = async (id: string) => {
+        const toastId = toast.loading("Removing member...", { style: TOAST_STYLES.PENDING });
         setIsMemberModalOpen(false);
-        toast.success('Member removed');
+        try {
+            await userService.deleteUser(id);
+            toast.success('Member removed', { id: toastId, style: TOAST_STYLES.SUCCESS });
+            refreshData();
+        } catch (error: any) {
+            toast.error("Failed to delete member: " + error.message, { id: toastId, style: TOAST_STYLES.ERROR });
+        }
     };
 
 
@@ -248,12 +424,12 @@ const ShiftSyncShell: React.FC = () => {
     const tabs = [
         { id: 'calendar', label: 'Calendar', icon: null },
         { id: 'my_shift', label: 'My Shift', icon: Briefcase },
-        { id: 'members', label: 'Members', icon: Users },
-    ] as const;
+        { id: 'members', label: 'Members', icon: Users, adminOnly: true },
+    ].filter(tab => !tab.adminOnly || userRole === UserRole.Admin);
 
     return (
         <div className="flex flex-col h-screen bg-slate-50/50">
-            <Toaster position="bottom-center" />
+            <Toaster position="bottom-center" richColors />
 
             {/* Top Navigation */}
             <header className="h-16 glass sticky top-0 z-50 px-6 flex items-center justify-between shadow-sm transition-all">
@@ -271,7 +447,6 @@ const ShiftSyncShell: React.FC = () => {
                                 key={tab.id}
                                 onClick={() => {
                                     setActiveTab(tab.id as any);
-                                    if (tab.id === 'calendar') setUserRole(UserRole.Admin);
                                 }}
                                 className={`
                                     relative px-4 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 z-10 flex items-center gap-2
@@ -316,90 +491,157 @@ const ShiftSyncShell: React.FC = () => {
                             <span className="text-sm font-semibold text-slate-700 min-w-[120px] text-center">
                                 {getDateRangeLabel()}
                             </span>
+                            {userTimezone && (
+                                <Badge variant="outline" className="ml-2 text-[10px] font-normal text-slate-500 bg-slate-50 border-slate-200">
+                                    {userTimezone}
+                                </Badge>
+                            )}
                         </div>
                     </motion.div>
                 )}
 
                 <div className="flex items-center gap-3">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={refreshData}
+                        className={`text-slate-400 hover:text-blue-600 hover:bg-blue-50/50 transition-all ${isLoadingData ? 'animate-spin text-blue-600' : ''}`}
+                        title="Refresh Data"
+                    >
+                        <RotateCw className="w-5 h-5" />
+                    </Button>
+
                     <Button variant="ghost" size="icon" className="relative text-slate-400 hover:text-slate-600 hover:bg-white/50">
                         <Bell className="w-5 h-5" />
                         <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white/50"></span>
                     </Button>
 
-                    <div className="flex items-center gap-2 pl-4 border-l border-slate-200">
-                        <div className="text-right hidden md:block">
-                            <p className="text-sm font-semibold text-slate-700 leading-none">Admin User</p>
-                            <p className="text-xs text-slate-400 mt-1">Super Admin</p>
-                        </div>
-                        <Avatar className="h-9 w-9 border-2 border-white shadow-sm ring-1 ring-slate-100">
-                            <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
-                                AD
-                            </AvatarFallback>
-                        </Avatar>
-                    </div>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <div className="flex items-center gap-2 pl-4 border-l border-slate-200 cursor-pointer hover:bg-slate-50/50 rounded-lg px-2 py-1 transition-colors">
+                                <div className="text-right hidden md:block">
+                                    <p className="text-sm font-semibold text-slate-700 leading-none">
+                                        {currentUser?.name || (userRole === UserRole.Admin ? 'Admin User' : 'Staff Member')}
+                                    </p>
+                                    <p className="text-xs text-slate-400 mt-1">
+                                        {userRole === UserRole.Admin ? 'System Administrator' : 'Shift Employee'}
+                                    </p>
+                                </div>
+                                <Avatar className="h-9 w-9 border-2 border-white shadow-sm ring-1 ring-slate-100">
+                                    <AvatarImage src={currentUser?.avatar} alt={currentUser?.name} />
+                                    <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white uppercase font-bold text-xs">
+                                        {currentUser?.name?.split(' ').map(n => n[0]).join('').slice(0, 2) || '??'}
+                                    </AvatarFallback>
+                                </Avatar>
+                            </div>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56">
+                            <DropdownMenuLabel>
+                                <div className="flex flex-col space-y-1">
+                                    <p className="text-sm font-medium leading-none">{currentUser?.name || 'User'}</p>
+                                    <p className="text-xs leading-none text-muted-foreground">
+                                        {currentUser?.email || ''}
+                                    </p>
+                                </div>
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => setIsProfileModalOpen(true)}>
+                                <Settings className="mr-2 h-4 w-4" />
+                                <span>Edit Profile</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    authService.logout();
+                                    window.location.href = '/view';
+                                }}
+                                className="text-red-600 focus:text-red-600"
+                            >
+                                <LogOut className="mr-2 h-4 w-4" />
+                                <span>Logout</span>
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </header>
 
             {/* Main Content Area */}
             <div className="flex flex-1 overflow-hidden relative">
                 <AnimatePresence mode="wait">
-                    <motion.div
-                        key={activeTab}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.2 }}
-                        className="w-full h-full flex flex-col min-h-0"
-                    >
-                        {activeTab === 'members' ? (
-                            <MembersView
-                                employees={employees}
-                                onAddMember={handleAddMember}
-                                onEditMember={handleEditMember}
-                            />
-                        ) : activeTab === 'my_shift' ? (
-                            <MyShiftView
-                                employees={employees}
-                                shifts={shifts}
-                            />
-                        ) : (
-                            /* Calendar Container */
-                            <main className="flex-1 flex flex-col relative min-h-0">
-                                {/* Toolbar */}
-                                <div className="h-14 border-b border-slate-100 bg-white/50 backdrop-blur-sm flex items-center justify-between px-6 z-10 flex-shrink-0">
-                                    <div className="flex bg-slate-100 rounded-lg p-1 gap-1">
-                                        {(['week', 'month', 'list'] as const).map((mode) => (
-                                            <button
-                                                key={mode}
-                                                onClick={() => setViewMode(mode as ViewMode)}
-                                                className={`
-                                                    px-3 py-1 text-xs font-semibold rounded-md capitalize transition-all
-                                                    ${viewMode === mode ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}
-                                                `}
-                                            >
-                                                {mode}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <div className="flex gap-3">
-                                        {userRole === UserRole.Admin && (
-                                            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                                                <Button
-                                                    size="sm"
-                                                    onClick={() => handleShiftCreate(new Date())}
-                                                    className="bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 text-xs gap-1.5 font-medium px-4 h-9 rounded-lg"
+                    {isLoadingData ? (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="flex-1 flex items-center justify-center bg-white/50 backdrop-blur-sm z-50 absolute inset-0"
+                        >
+                            <div className="flex flex-col items-center gap-4">
+                                <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                                <p className="text-slate-500 font-medium animate-pulse">Syncing schedule...</p>
+                            </div>
+                        </motion.div>
+                    ) : (
+                        <motion.div
+                            key={activeTab}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            transition={{ duration: 0.2 }}
+                            className="w-full h-full flex flex-col min-h-0"
+                        >
+                            {activeTab === 'members' ? (
+                                <MembersView
+                                    employees={employees}
+                                    onAddMember={handleAddMember}
+                                    onEditMember={handleEditMember}
+                                    onDeleteMember={(emp) => handleDeleteMember(emp.id)}
+                                />
+                            ) : activeTab === 'my_shift' ? (
+                                <MyShiftView
+                                    employees={employees}
+                                    shifts={myShifts}
+                                    marketplaceShifts={marketplaceShifts}
+                                    onRefresh={refreshData}
+                                />
+                            ) : (
+                                /* Calendar Container */
+                                <main className="flex-1 flex flex-col relative min-h-0">
+                                    {/* Toolbar */}
+                                    <div className="h-14 border-b border-slate-100 bg-white/50 backdrop-blur-sm flex items-center justify-between px-6 z-10 flex-shrink-0">
+                                        <div className="flex bg-slate-100 rounded-lg p-1 gap-1">
+                                            {(['week', 'month', 'list'] as const).map((mode) => (
+                                                <button
+                                                    key={mode}
+                                                    onClick={() => setViewMode(mode as ViewMode)}
+                                                    className={`
+                                                        px-3 py-1 text-xs font-semibold rounded-md capitalize transition-all
+                                                        ${viewMode === mode ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}
+                                                    `}
                                                 >
-                                                    <Plus className="w-4 h-4" /> New Shift
-                                                </Button>
-                                            </motion.div>
-                                        )}
+                                                    {mode}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <div className="flex gap-3">
+                                            {userRole === UserRole.Admin && (
+                                                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                                                    <Button
+                                                        size="sm"
+                                                        onClick={() => handleShiftCreate(new Date())}
+                                                        className="bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 text-xs gap-1.5 font-medium px-4 h-9 rounded-lg"
+                                                    >
+                                                        <Plus className="w-4 h-4" /> New Shift
+                                                    </Button>
+                                                </motion.div>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
 
-                                {renderView()}
-                            </main>
-                        )}
-                    </motion.div>
+                                    {renderView()}
+                                </main>
+                            )}
+                        </motion.div>
+                    )}
                 </AnimatePresence>
             </div>
 
@@ -411,6 +653,9 @@ const ShiftSyncShell: React.FC = () => {
                 onClose={() => setIsShiftModalOpen(false)}
                 onSave={handleSaveShift}
                 onDelete={handleDeleteShift}
+                onApprove={handleApproveShift}
+                onReject={handleRejectShift}
+                userRole={userRole}
             />
 
             <MemberModal
@@ -419,6 +664,13 @@ const ShiftSyncShell: React.FC = () => {
                 onClose={() => setIsMemberModalOpen(false)}
                 onSave={handleSaveMember}
                 onDelete={handleDeleteMember}
+            />
+
+            <ProfileEditModal
+                isOpen={isProfileModalOpen}
+                currentUser={currentUser}
+                onClose={() => setIsProfileModalOpen(false)}
+                onProfileUpdated={refreshData}
             />
         </div>
     );

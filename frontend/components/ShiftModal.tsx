@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Shift, Employee, ShiftStatus } from '../types';
+import { Shift, Employee, ShiftStatus, UserRole } from '../types';
 import { format, differenceInMinutes } from 'date-fns';
 import { X, User, Trash2, Clock, Check, Plus, Layers, Divide } from 'lucide-react';
 import {
@@ -35,9 +35,22 @@ interface ShiftModalProps {
     onClose: () => void;
     onSave: (shift: Partial<Shift> | Partial<Shift>[]) => void;
     onDelete: (id: string) => void;
+    onApprove?: (id: string) => void;
+    onReject?: (id: string) => void;
+    userRole?: UserRole | null;
 }
 
-const ShiftModal: React.FC<ShiftModalProps> = ({ shift, employees, isOpen, onClose, onSave, onDelete }) => {
+const ShiftModal: React.FC<ShiftModalProps> = ({
+    shift,
+    employees,
+    isOpen,
+    onClose,
+    onSave,
+    onDelete,
+    onApprove,
+    onReject,
+    userRole
+}) => {
     const [formData, setFormData] = useState<Partial<Shift>>({});
     const [shiftQueue, setShiftQueue] = useState<Partial<Shift>[]>([]);
 
@@ -45,8 +58,11 @@ const ShiftModal: React.FC<ShiftModalProps> = ({ shift, employees, isOpen, onClo
     const [mode, setMode] = useState<'single' | 'split'>('single');
     const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
 
-    // If ID exists, we are editing. If not, we are creating.
+    // Derived logic
     const isEditing = !!formData.id;
+    const isAdmin = userRole === UserRole.Admin;
+    const isMember = userRole === UserRole.Employee;
+    const canEdit = isAdmin;
 
     useEffect(() => {
         if (shift) {
@@ -160,7 +176,7 @@ const ShiftModal: React.FC<ShiftModalProps> = ({ shift, employees, isOpen, onClo
                     )}
                 </DialogHeader>
 
-                {!isEditing && (
+                {!isEditing && isAdmin && (
                     <div className="px-6 pt-4">
                         <Tabs value={mode} onValueChange={(v) => setMode(v as 'single' | 'split')} className="w-full">
                             <TabsList className="w-full grid grid-cols-2">
@@ -173,6 +189,37 @@ const ShiftModal: React.FC<ShiftModalProps> = ({ shift, employees, isOpen, onClo
 
                 <ScrollArea className="flex-1 px-6 py-4">
                     <div className="space-y-4">
+                        {/* Assignment Status Actions */}
+                        {isEditing && (formData.status === ShiftStatus.PendingConfirmation || formData.status === ShiftStatus.Pending) && (
+                            <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 flex flex-col gap-3 mb-2 shadow-sm animate-in fade-in slide-in-from-top-1">
+                                <div className="flex items-start gap-3">
+                                    <div className="h-8 w-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                                        <Check className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-amber-900 leading-tight">Action Required</p>
+                                        <p className="text-xs text-amber-700 mt-0.5">This shift is pending validation. Approve it to add it to your schedule.</p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="flex-1 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 h-9"
+                                        onClick={() => onReject?.(formData.id!)}
+                                    >
+                                        Reject
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm h-9"
+                                        onClick={() => onApprove?.(formData.id!)}
+                                    >
+                                        Approve
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
                         {/* Employee Selection */}
                         <div className="space-y-2">
                             <Label className="uppercase text-xs text-slate-500 font-bold flex justify-between">
@@ -182,7 +229,21 @@ const ShiftModal: React.FC<ShiftModalProps> = ({ shift, employees, isOpen, onClo
                                 )}
                             </Label>
 
-                            {mode === 'single' ? (
+                            {!canEdit ? (
+                                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                    <div className="h-10 w-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
+                                        {(employees.find(e => e.id === formData.employeeId)?.name || formData.assignedUser?.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-semibold text-slate-900">
+                                            {employees.find(e => e.id === formData.employeeId)?.name || formData.assignedUser?.name || (formData.employeeId ? 'Assigned' : 'Unassigned')}
+                                        </p>
+                                        <p className="text-xs text-slate-500">
+                                            {employees.find(e => e.id === formData.employeeId)?.role || (formData.employeeId ? 'Staff' : 'Open Shift')}
+                                        </p>
+                                    </div>
+                                </div>
+                            ) : mode === 'single' ? (
                                 <Select
                                     value={formData.employeeId || "open"}
                                     onValueChange={(val) => setFormData({ ...formData, employeeId: val === "open" ? null : val })}
@@ -239,6 +300,7 @@ const ShiftModal: React.FC<ShiftModalProps> = ({ shift, employees, isOpen, onClo
                                         value={formData.start ? format(formData.start, 'HH:mm') : ''}
                                         onChange={(e) => handleTimeChange('start', e.target.value)}
                                         required
+                                        disabled={!canEdit}
                                     />
                                     <Clock className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
                                 </div>
@@ -252,6 +314,7 @@ const ShiftModal: React.FC<ShiftModalProps> = ({ shift, employees, isOpen, onClo
                                         value={formData.end ? format(formData.end, 'HH:mm') : ''}
                                         onChange={(e) => handleTimeChange('end', e.target.value)}
                                         required
+                                        disabled={!canEdit}
                                     />
                                     <Clock className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
                                 </div>
@@ -266,6 +329,7 @@ const ShiftModal: React.FC<ShiftModalProps> = ({ shift, employees, isOpen, onClo
                                     placeholder="e.g. Server"
                                     value={formData.role || ''}
                                     onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                                    disabled={!canEdit}
                                 />
                             </div>
                             <div className="space-y-2">
@@ -273,6 +337,7 @@ const ShiftModal: React.FC<ShiftModalProps> = ({ shift, employees, isOpen, onClo
                                 <Select
                                     value={formData.status || ShiftStatus.Pending}
                                     onValueChange={(val) => setFormData({ ...formData, status: val as ShiftStatus })}
+                                    disabled={!canEdit}
                                 >
                                     <SelectTrigger>
                                         <SelectValue />
@@ -294,6 +359,7 @@ const ShiftModal: React.FC<ShiftModalProps> = ({ shift, employees, isOpen, onClo
                                 className="min-h-[80px] resize-none"
                                 value={formData.notes || ''}
                                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                                disabled={!canEdit}
                             />
                         </div>
 
@@ -332,7 +398,7 @@ const ShiftModal: React.FC<ShiftModalProps> = ({ shift, employees, isOpen, onClo
 
                 <DialogFooter className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex flex-row items-center justify-between sm:justify-between w-full">
                     <div className="flex gap-2">
-                        {isEditing ? (
+                        {isEditing && isAdmin ? (
                             <Button
                                 variant="destructive"
                                 type="button"
@@ -341,7 +407,7 @@ const ShiftModal: React.FC<ShiftModalProps> = ({ shift, employees, isOpen, onClo
                             >
                                 <Trash2 className="w-4 h-4" /> Delete
                             </Button>
-                        ) : (
+                        ) : !isEditing && isAdmin ? (
                             <Button
                                 variant="outline"
                                 type="button"
@@ -350,14 +416,16 @@ const ShiftModal: React.FC<ShiftModalProps> = ({ shift, employees, isOpen, onClo
                             >
                                 <Layers className="w-4 h-4" /> {mode === 'split' ? 'Add Split Set' : 'Add Another'}
                             </Button>
-                        )}
+                        ) : null}
                     </div>
 
                     <div className="flex gap-2">
-                        <Button variant="ghost" onClick={onClose}>Cancel</Button>
-                        <Button onClick={() => handleSubmit()} className="bg-blue-600 hover:bg-blue-700">
-                            Save {isEditing ? 'Changes' : (mode === 'split' || shiftQueue.length > 0 ? 'All' : 'Shift')}
-                        </Button>
+                        <Button variant="ghost" onClick={onClose}>{isAdmin ? 'Cancel' : 'Close'}</Button>
+                        {isAdmin && (
+                            <Button onClick={() => handleSubmit()} className="bg-blue-600 hover:bg-blue-700">
+                                Save {isEditing ? 'Changes' : (mode === 'split' || shiftQueue.length > 0 ? 'All' : 'Shift')}
+                            </Button>
+                        )}
                     </div>
                 </DialogFooter>
             </DialogContent>
