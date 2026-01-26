@@ -1,6 +1,6 @@
 "use client";
 
-const BASE_URL = "http://127.0.0.1:8000/api/v1";
+const BASE_URL = "https://shiftsync.dossehshalom.live/api/v1";
 
 export interface SuccessResponse<T = any> {
     status: string;
